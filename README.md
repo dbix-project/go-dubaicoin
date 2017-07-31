@@ -1,3 +1,6 @@
+### Attention: This is an Old Repo [DO NOT USE]
+### Our New Repo is now Located Here: https://github.com/dubaicoin-dbix/go-dubaicoin
+
 ## Dubaicoin Go
 
 * P2PPort: 57955
