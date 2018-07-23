@@ -1,32 +1,33 @@
-// Copyright 2015 The go-dubaicoin Authors
-// This file is part of the go-dubaicoin library.
+// Copyright 2015 The go-ethereum Authors
+// This file is part of the go-ethereum library.
 //
-// The go-dubaicoin library is free software: you can redistribute it and/or modify
+// The go-ethereum library is free software: you can redistribute it and/or modify
 // it under the terms of the GNU Lesser General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
 //
-// The go-dubaicoin library is distributed in the hope that it will be useful,
+// The go-ethereum library is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
 // GNU Lesser General Public License for more details.
 //
 // You should have received a copy of the GNU Lesser General Public License
-// along with the go-dubaicoin library. If not, see <http://www.gnu.org/licenses/>.
+// along with the go-ethereum library. If not, see <http://www.gnu.org/licenses/>.
 
 package core
 
 import (
 	"fmt"
 	"math/big"
-	"github.com/dbix-project/go-dubaicoin/common"
-	"github.com/dbix-project/go-dubaicoin/core/state"
-	"github.com/dbix-project/go-dubaicoin/core/types"
-	"github.com/dbix-project/go-dubaicoin/core/vm"
-	"github.com/dbix-project/go-dubaicoin/ethdb"
-	"github.com/dbix-project/go-dubaicoin/event"
-	"github.com/dbix-project/go-dubaicoin/params"
-	"github.com/dbix-project/go-dubaicoin/pow"
+
+	"github.com/dubaicoin-dbix/go-dubaicoin/common"
+	"github.com/dubaicoin-dbix/go-dubaicoin/core/state"
+	"github.com/dubaicoin-dbix/go-dubaicoin/core/types"
+	"github.com/dubaicoin-dbix/go-dubaicoin/core/vm"
+	"github.com/dubaicoin-dbix/go-dubaicoin/dbixdb"
+	"github.com/dubaicoin-dbix/go-dubaicoin/event"
+	"github.com/dubaicoin-dbix/go-dubaicoin/params"
+	"github.com/dubaicoin-dbix/go-dubaicoin/pow"
 )
 
 /*
@@ -34,11 +35,11 @@ import (
  */
 
 // MakeChainConfig returns a new ChainConfig with the dubaicoin default chain settings.
-func MakeChainConfig() *ChainConfig {
-	return &ChainConfig{
+func MakeChainConfig() *params.ChainConfig {
+	return &params.ChainConfig{
 		HomesteadBlock: big.NewInt(0),
 		DAOForkBlock:   nil,
-		DAOForkSupport: true,
+		DAOForkSupport: false,
 	}
 }
 
@@ -72,6 +73,8 @@ type BlockGen struct {
 	txs      []*types.Transaction
 	receipts []*types.Receipt
 	uncles   []*types.Header
+
+	config *params.ChainConfig
 }
 
 // SetCoinbase sets the coinbase of the generated block.
@@ -105,7 +108,7 @@ func (b *BlockGen) AddTx(tx *types.Transaction) {
 		b.SetCoinbase(common.Address{})
 	}
 	b.statedb.StartRecord(tx.Hash(), common.Hash{}, len(b.txs))
-	receipt, _, _, err := ApplyTransaction(MakeChainConfig(), nil, b.gasPool, b.statedb, b.header, tx, b.header.GasUsed, vm.Config{})
+	receipt, _, err := ApplyTransaction(b.config, nil, b.gasPool, b.statedb, b.header, tx, b.header.GasUsed, vm.Config{})
 	if err != nil {
 		panic(err)
 	}
@@ -162,7 +165,9 @@ func (b *BlockGen) OffsetTime(seconds int64) {
 	if b.header.Time.Cmp(b.parent.Header().Time) <= 0 {
 		panic("block time out of range")
 	}
-	b.header.Difficulty = CalcDifficulty(MakeChainConfig(), b.header.Time.Uint64(), b.parent.Time().Uint64(), b.parent.Number(), b.parent.Difficulty())
+	b.header.Difficulty = CalcDifficultyStandard(MakeChainConfig(), b.header.Time.Uint64(), b.parent.Time().Uint64(), b.parent.Number(), b.parent.Difficulty()) //FluxDbix
+	
+	/*b.header.Difficulty = CalcDifficulty(MakeChainConfig(), b.header.Time.Uint64(), b.parent.Time().Uint64(), b.parent.Number(), b.parent.Difficulty())*/
 }
 
 // GenerateChain creates a chain of n blocks. The first block's
@@ -177,10 +182,10 @@ func (b *BlockGen) OffsetTime(seconds int64) {
 // Blocks created by GenerateChain do not contain valid proof of work
 // values. Inserting them into BlockChain requires use of FakePow or
 // a similar non-validating proof of work implementation.
-func GenerateChain(config *ChainConfig, parent *types.Block, db ethdb.Database, n int, gen func(int, *BlockGen)) ([]*types.Block, []types.Receipts) {
+func GenerateChain(config *params.ChainConfig, parent *types.Block, db ethdb.Database, n int, gen func(int, *BlockGen)) ([]*types.Block, []types.Receipts) {
 	blocks, receipts := make(types.Blocks, n), make([]types.Receipts, n)
 	genblock := func(i int, h *types.Header, statedb *state.StateDB) (*types.Block, types.Receipts) {
-		b := &BlockGen{parent: parent, i: i, chain: blocks, header: h, statedb: statedb}
+		b := &BlockGen{parent: parent, i: i, chain: blocks, header: h, statedb: statedb, config: config}
 
 		// Mutate the state and block according to any hard-fork specs
 		if config == nil {
@@ -202,7 +207,7 @@ func GenerateChain(config *ChainConfig, parent *types.Block, db ethdb.Database, 
 			gen(i, b)
 		}
 		AccumulateRewards(statedb, h, b.uncles)
-		root, err := statedb.Commit()
+		root, err := statedb.Commit(config.IsEIP158(h.Number))
 		if err != nil {
 			panic(fmt.Sprintf("state write error: %v", err))
 		}
@@ -214,7 +219,7 @@ func GenerateChain(config *ChainConfig, parent *types.Block, db ethdb.Database, 
 		if err != nil {
 			panic(err)
 		}
-		header := makeHeader(parent, statedb)
+		header := makeHeader(config, parent, statedb)
 		block, receipt := genblock(i, header, statedb)
 		blocks[i] = block
 		receipts[i] = receipt
@@ -223,7 +228,7 @@ func GenerateChain(config *ChainConfig, parent *types.Block, db ethdb.Database, 
 	return blocks, receipts
 }
 
-func makeHeader(parent *types.Block, state *state.StateDB) *types.Header {
+func makeHeader(config *params.ChainConfig, parent *types.Block, state *state.StateDB) *types.Header {
 	var time *big.Int
 	if parent.Time() == nil {
 		time = big.NewInt(10)
@@ -231,10 +236,12 @@ func makeHeader(parent *types.Block, state *state.StateDB) *types.Header {
 		time = new(big.Int).Add(parent.Time(), big.NewInt(10)) // block time is fixed at 10 seconds
 	}
 	return &types.Header{
-		Root:       state.IntermediateRoot(),
+		Root:       state.IntermediateRoot(config.IsEIP158(parent.Number())),
 		ParentHash: parent.Hash(),
 		Coinbase:   parent.Coinbase(),
-		Difficulty: CalcDifficulty(MakeChainConfig(), time.Uint64(), new(big.Int).Sub(time, big.NewInt(10)).Uint64(), parent.Number(), parent.Difficulty()),
+		Difficulty: CalcDifficultyStandard(MakeChainConfig(), time.Uint64(), new(big.Int).Sub(time, big.NewInt(10)).Uint64(), parent.Number(), parent.Difficulty()), //FluxDbix
+		
+		/*Difficulty: CalcDifficulty(MakeChainConfig(), time.Uint64(), new(big.Int).Sub(time, big.NewInt(10)).Uint64(), parent.Number(), parent.Difficulty()),*/
 		GasLimit:   CalcGasLimit(parent),
 		GasUsed:    new(big.Int),
 		Number:     new(big.Int).Add(parent.Number(), common.Big1),
@@ -253,7 +260,7 @@ func newCanonical(n int, full bool) (ethdb.Database, *BlockChain, error) {
 	// Initialize a fresh chain with only a genesis block
 	genesis, _ := WriteTestNetGenesisBlock(db)
 
-	blockchain, _ := NewBlockChain(db, MakeChainConfig(), FakePow{}, evmux)
+	blockchain, _ := NewBlockChain(db, MakeChainConfig(), FakePow{}, evmux, vm.Config{})
 	// Create and inject the requested chain
 	if n == 0 {
 		return db, blockchain, nil
@@ -282,7 +289,7 @@ func makeHeaderChain(parent *types.Header, n int, db ethdb.Database, seed int) [
 
 // makeBlockChain creates a deterministic chain of blocks rooted at parent.
 func makeBlockChain(parent *types.Block, n int, db ethdb.Database, seed int) []*types.Block {
-	blocks, _ := GenerateChain(nil, parent, db, n, func(i int, b *BlockGen) {
+	blocks, _ := GenerateChain(params.TestChainConfig, parent, db, n, func(i int, b *BlockGen) {
 		b.SetCoinbase(common.Address{0: byte(seed), 19: byte(i)})
 	})
 	return blocks

@@ -1,25 +1,25 @@
-// Copyright 2014 The go-ethereum Authors && Copyright 2015 go-dubaicoin Authors
-// This file is part of the go-dubaicoin library.
+// Copyright 2014 The go-ethereum Authors
+// This file is part of the go-ethereum library.
 //
-// The go-dubaicoin library is free software: you can redistribute it and/or modify
+// The go-ethereum library is free software: you can redistribute it and/or modify
 // it under the terms of the GNU Lesser General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
 //
-// The go-dubaicoin library is distributed in the hope that it will be useful,
+// The go-ethereum library is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
 // GNU Lesser General Public License for more details.
 //
 // You should have received a copy of the GNU Lesser General Public License
-// along with the go-dubaicoin library. If not, see <http://www.gnu.org/licenses/>.
+// along with the go-ethereum library. If not, see <http://www.gnu.org/licenses/>.
 
 /*
 
 This key store behaves as KeyStorePlain with the difference that
 the private key is encrypted and on disk uses another JSON encoding.
 
-The crypto is documented at https://github.com/dbix-project/wiki/wiki/Web3-Secret-Storage-Definition
+The crypto is documented at https://github.com/ethereum/wiki/wiki/Web3-Secret-Storage-Definition
 
 */
 
@@ -34,9 +34,10 @@ import (
 	"fmt"
 	"io/ioutil"
 	"path/filepath"
-	"github.com/dbix-project/go-dubaicoin/common"
-	"github.com/dbix-project/go-dubaicoin/crypto"
-	"github.com/dbix-project/go-dubaicoin/crypto/randentropy"
+
+	"github.com/dubaicoin-dbix/go-dubaicoin/common"
+	"github.com/dubaicoin-dbix/go-dubaicoin/crypto"
+	"github.com/dubaicoin-dbix/go-dubaicoin/crypto/randentropy"
 	"github.com/pborman/uuid"
 	"golang.org/x/crypto/pbkdf2"
 	"golang.org/x/crypto/scrypt"
@@ -45,12 +46,20 @@ import (
 const (
 	keyHeaderKDF = "scrypt"
 
-	// n,r,p = 2^18, 8, 1 uses 256MB memory and approx 1s CPU time on a modern CPU.
+	// StandardScryptN is the N parameter of Scrypt encryption algorithm, using 256MB
+	// memory and taking approximately 1s CPU time on a modern processor.
 	StandardScryptN = 1 << 18
+
+	// StandardScryptP is the P parameter of Scrypt encryption algorithm, using 256MB
+	// memory and taking approximately 1s CPU time on a modern processor.
 	StandardScryptP = 1
 
-	// n,r,p = 2^12, 8, 6 uses 4MB memory and approx 100ms CPU time on a modern CPU.
+	// LightScryptN is the N parameter of Scrypt encryption algorithm, using 4MB
+	// memory and taking approximately 100ms CPU time on a modern processor.
 	LightScryptN = 1 << 12
+
+	// LightScryptP is the P parameter of Scrypt encryption algorithm, using 4MB
+	// memory and taking approximately 100ms CPU time on a modern processor.
 	LightScryptP = 6
 
 	scryptR     = 8
@@ -106,7 +115,8 @@ func EncryptKey(key *Key, auth string, scryptN, scryptP int) ([]byte, error) {
 		return nil, err
 	}
 	encryptKey := derivedKey[:16]
-	keyBytes := crypto.FromECDSA(key.PrivateKey)
+	keyBytes0 := crypto.FromECDSA(key.PrivateKey)
+	keyBytes := common.LeftPadBytes(keyBytes0, 32)
 
 	iv := randentropy.GetEntropyCSPRNG(aes.BlockSize) // 16
 	cipherText, err := aesCTRXOR(encryptKey, keyBytes, iv)

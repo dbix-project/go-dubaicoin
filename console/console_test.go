@@ -23,17 +23,15 @@ import (
 	"io/ioutil"
 	"math/big"
 	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
-	"github.com/dbix-project/go-dubaicoin/accounts"
-	"github.com/dbix-project/go-dubaicoin/common"
-	"github.com/dbix-project/go-dubaicoin/core"
-	"github.com/dbix-project/go-dubaicoin/eth"
-	"github.com/dbix-project/go-dubaicoin/internal/jsre"
-	"github.com/dbix-project/go-dubaicoin/node"
+	"github.com/dubaicoin-dbix/go-dubaicoin/common"
+	"github.com/dubaicoin-dbix/go-dubaicoin/dbix"
+	"github.com/dubaicoin-dbix/go-dubaicoin/internal/jsre"
+	"github.com/dubaicoin-dbix/go-dubaicoin/node"
+	"github.com/dubaicoin-dbix/go-dubaicoin/params"
 )
 
 const (
@@ -92,24 +90,22 @@ func newTester(t *testing.T, confOverride func(*eth.Config)) *tester {
 	if err != nil {
 		t.Fatalf("failed to create temporary keystore: %v", err)
 	}
-	accman := accounts.NewPlaintextManager(filepath.Join(workspace, "keystore"))
 
-	// Create a networkless protocol stack and start an Ethereum service within
-	stack, err := node.New(&node.Config{DataDir: workspace, Name: testInstance, NoDiscovery: true})
+	// Create a networkless protocol stack and start a Dubaicoin service within
+	stack, err := node.New(&node.Config{DataDir: workspace, UseLightweightKDF: true, Name: testInstance, NoDiscovery: true})
 	if err != nil {
 		t.Fatalf("failed to create node: %v", err)
 	}
-	dbixConf := &eth.Config{
-		ChainConfig:    &core.ChainConfig{HomesteadBlock: new(big.Int)},
-		Etherbase:      common.HexToAddress(testAddress),
-		AccountManager: accman,
-		PowTest:        true,
+	ethConf := &eth.Config{
+		ChainConfig: &params.ChainConfig{HomesteadBlock: new(big.Int), ChainId: new(big.Int)},
+		Etherbase:   common.HexToAddress(testAddress),
+		PowTest:     true,
 	}
 	if confOverride != nil {
-		confOverride(dbixConf)
+		confOverride(ethConf)
 	}
-	if err = stack.Register(func(ctx *node.ServiceContext) (node.Service, error) { return eth.New(ctx, dbixConf) }); err != nil {
-		t.Fatalf("failed to register Ethereum protocol: %v", err)
+	if err = stack.Register(func(ctx *node.ServiceContext) (node.Service, error) { return eth.New(ctx, ethConf) }); err != nil {
+		t.Fatalf("failed to register Dubaicoin protocol: %v", err)
 	}
 	// Start the node and assemble the JavaScript console around it
 	if err = stack.Start(); err != nil {

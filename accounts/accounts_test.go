@@ -1,18 +1,18 @@
-// Copyright 2015 The go-dubaicoin Authors
-// This file is part of the go-dubaicoin library.
+// Copyright 2015 The go-ethereum Authors
+// This file is part of the go-ethereum library.
 //
-// The go-dubaicoin library is free software: you can redistribute it and/or modify
+// The go-ethereum library is free software: you can redistribute it and/or modify
 // it under the terms of the GNU Lesser General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
 //
-// The go-dubaicoin library is distributed in the hope that it will be useful,
+// The go-ethereum library is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
 // GNU Lesser General Public License for more details.
 //
 // You should have received a copy of the GNU Lesser General Public License
-// along with the go-dubaicoin library. If not, see <http://www.gnu.org/licenses/>.
+// along with the go-ethereum library. If not, see <http://www.gnu.org/licenses/>.
 
 package accounts
 
@@ -24,8 +24,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/dubaicoin/go-dubaicoin/common"
-
+	"github.com/dubaicoin-dbix/go-dubaicoin/common"
 )
 
 var testSigData = make([]byte, 32)
@@ -54,14 +53,14 @@ func TestManager(t *testing.T) {
 	if err := am.Update(a, "foo", "bar"); err != nil {
 		t.Errorf("Update error: %v", err)
 	}
-	if err := am.DeleteAccount(a, "bar"); err != nil {
-		t.Errorf("DeleteAccount error: %v", err)
+	if err := am.Delete(a, "bar"); err != nil {
+		t.Errorf("Delete error: %v", err)
 	}
 	if common.FileExist(a.File) {
-		t.Errorf("account file %s should be gone after DeleteAccount", a.File)
+		t.Errorf("account file %s should be gone after Delete", a.File)
 	}
 	if am.HasAddress(a.Address) {
-		t.Errorf("HasAccount(%x) should've returned true after DeleteAccount", a.Address)
+		t.Errorf("HasAccount(%x) should've returned true after Delete", a.Address)
 	}
 }
 
@@ -96,7 +95,7 @@ func TestSignWithPassphrase(t *testing.T) {
 		t.Fatal("expected account to be locked")
 	}
 
-	_, err = am.SignWithPassphrase(acc.Address, pass, testSigData)
+	_, err = am.SignWithPassphrase(acc, pass, testSigData)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -105,7 +104,7 @@ func TestSignWithPassphrase(t *testing.T) {
 		t.Fatal("expected account to be locked")
 	}
 
-	if _, err = am.SignWithPassphrase(acc.Address, "invalid passwd", testSigData); err == nil {
+	if _, err = am.SignWithPassphrase(acc, "invalid passwd", testSigData); err == nil {
 		t.Fatal("expected SignHash to fail with invalid password")
 	}
 }
@@ -116,6 +115,9 @@ func TestTimedUnlock(t *testing.T) {
 
 	pass := "foo"
 	a1, err := am.NewAccount(pass)
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	// Signing without passphrase fails because account is locked
 	_, err = am.Sign(a1.Address, testSigData)
@@ -148,6 +150,9 @@ func TestOverrideUnlock(t *testing.T) {
 
 	pass := "foo"
 	a1, err := am.NewAccount(pass)
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	// Unlock indefinitely.
 	if err = am.TimedUnlock(a1, pass, 5*time.Minute); err != nil {
@@ -207,8 +212,7 @@ func TestSignRace(t *testing.T) {
 }
 
 func tmpManager(t *testing.T, encrypted bool) (string, *Manager) {
-	d, err := ioutil.TempDir("", "dbix-keystore-test")
-
+	d, err := ioutil.TempDir("", "eth-keystore-test")
 	if err != nil {
 		t.Fatal(err)
 	}

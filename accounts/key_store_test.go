@@ -1,18 +1,18 @@
-// Copyright 2014 The go-ethereum Authors && Copyright 2015 go-dubaicoin Authors
-// This file is part of the go-dubaicoin library.
+// Copyright 2014 The go-ethereum Authors
+// This file is part of the go-ethereum library.
 //
-// The go-dubaicoin library is free software: you can redistribute it and/or modify
+// The go-ethereum library is free software: you can redistribute it and/or modify
 // it under the terms of the GNU Lesser General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
 //
-// The go-dubaicoin library is distributed in the hope that it will be useful,
+// The go-ethereum library is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
 // GNU Lesser General Public License for more details.
 //
 // You should have received a copy of the GNU Lesser General Public License
-// along with the go-dubaicoin library. If not, see <http://www.gnu.org/licenses/>.
+// along with the go-ethereum library. If not, see <http://www.gnu.org/licenses/>.
 
 package accounts
 
@@ -26,9 +26,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/dbix-project/go-dubaicoin/common"
-	"github.com/dbix-project/go-dubaicoin/crypto"
-
+	"github.com/dubaicoin-dbix/go-dubaicoin/common"
+	"github.com/dubaicoin-dbix/go-dubaicoin/crypto"
 )
 
 func tmpKeyStore(t *testing.T, encrypted bool) (dir string, ks keyStore) {
@@ -121,10 +120,8 @@ func TestImportPreSaleKey(t *testing.T) {
 	}
 }
 
-
 // Test and utils for the key store tests in the Dubaicoin JSON tests;
 // testdataKeyStoreTests/basic_tests.json
-
 type KeyStoreTestV3 struct {
 	Json     encryptedKeyJSONV3
 	Password string
@@ -241,4 +238,16 @@ func TestKeyForDirectICAP(t *testing.T) {
 	if !strings.HasPrefix(key.Address.Hex(), "0x00") {
 		t.Errorf("Expected first address byte to be zero, have: %s", key.Address.Hex())
 	}
+}
+
+func TestV3_31_Byte_Key(t *testing.T) {
+	t.Parallel()
+	tests := loadKeyStoreTestV3("testdata/v3_test_vector.json", t)
+	testDecryptV3(tests["31_byte_key"], t)
+}
+
+func TestV3_30_Byte_Key(t *testing.T) {
+	t.Parallel()
+	tests := loadKeyStoreTestV3("testdata/v3_test_vector.json", t)
+	testDecryptV3(tests["30_byte_key"], t)
 }

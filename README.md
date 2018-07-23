@@ -3,6 +3,8 @@
 
 ## Dubaicoin Go
 
+Official golang implementation of the Dubaicoin protocol.
+
 * P2PPort: 57955
 * RPCPort: 7565
 * WSPort: 7557
@@ -11,7 +13,7 @@
 ## Building the source
 
 For prerequisites and detailed build instructions please read the
-[Installation Instructions](https://github.com/dbix-project/go-dubaicoin/wiki/Building-Dubaicoin)
+[Installation Instructions](https://github.com/ethereum/go-ethereum/wiki/Building-Ethereum)
 on the wiki.
 
 Building gdbix requires both a Go and a C compiler.
@@ -26,28 +28,29 @@ or, to build the full suite of utilities:
 
 ## Executables
 
-Go Dubaicoin comes with several wrappers/executables found in
-[the `cmd` directory](https://github.com/dbix-project/go-dubaicoin/tree/develop/cmd):
+The go-ethereum project comes with several wrappers/executables found in the `cmd` directory.
 
-* `gdbix` Dubaicoin CLI (dubaicoin command line interface client)
-* `bootnode` runs a bootstrap node for the Discovery Protocol
-* `exptest` test tool which runs with the [tests](https://github.com/dbix-project/tests) suite:
-  `/path/to/test.json > exptest --test BlockTests --stdin`.
-* `evm` is a generic Dubaicoin Virtual Machine: `evm -code 60ff60ff -gas
-  10000 -price 0 -dump`. See `-h` for a detailed description.
-* `disasm` disassembles EVM code: `echo "6001" | disasm`
-* `rlpdump` prints RLP structures
+| Command    | Description |
+|:----------:|-------------|
+| **`gdbix`** | Our main Ethereum CLI client. It is the entry point into the Dubaicoin network (main-, test- or private net), capable of running as a full node (default) archive node (retaining all historical state) or a light node (retrieving data live). It can be used by other processes as a gateway into the Dubaicoin network via JSON RPC endpoints exposed on top of HTTP, WebSocket and/or IPC transports. `gdbix --help` and the [CLI Wiki page](https://github.com/dubaicoin-dbix/go-dubaicoin/wiki/Command-Line-Options) for command line options |
+| `abigen` | Source code generator to convert Ethereum contract definitions into easy to use, compile-time type-safe Go packages. It operates on plain [Ethereum contract ABIs](https://github.com/ethereum/wiki/wiki/Ethereum-Contract-ABI) with expanded functionality if the contract bytecode is also available. However it also accepts Solidity source files, making development much more streamlined. Please see our [Native DApps](https://github.com/ethereum/go-ethereum/wiki/Native-DApps:-Go-bindings-to-Ethereum-contracts) wiki page for details. |
+| `bootnode` | Stripped down version of our Ethereum client implementation that only takes part in the network node discovery protocol, but does not run any of the higher level application protocols. It can be used as a lightweight bootstrap node to aid in finding peers in private networks. |
+| `disasm` | Bytecode disassembler to convert EVM (Ethereum Virtual Machine) bytecode into more user friendly assembly-like opcodes (e.g. `echo "6001" | disasm`). For details on the individual opcodes, please see pages 22-30 of the [Ethereum Yellow Paper](http://gavwood.com/paper.pdf). |
+| `evm` | Developer utility version of the EVM (Ethereum Virtual Machine) that is capable of running bytecode snippets within a configurable environment and execution mode. Its purpose is to allow insolated, fine-grained debugging of EVM opcodes (e.g. `evm --code 60ff60ff --debug`). |
+| `gethrpctest` | Developer utility tool to support our [ethereum/rpc-test](https://github.com/ethereum/rpc-tests) test suite which validates baseline conformity to the [Ethereum JSON RPC](https://github.com/ethereum/wiki/wiki/JSON-RPC) specs. Please see the [test suite's readme](https://github.com/ethereum/rpc-tests/blob/master/README.md) for details. |
+| `rlpdump` | Developer utility tool to convert binary RLP ([Recursive Length Prefix](https://github.com/ethereum/wiki/wiki/RLP)) dumps (data encoding used by the Dubaicoin protocol both network as well as consensus wise) to user friendlier hierarchical representation (e.g. `rlpdump --hex CE0183FFFFFFC4C304050583616263`). |
+| `swarm`    | swarm daemon and tools. This is the entrypoint for the swarm network. `swarm --help` for command line options and subcommands. See https://swarm-guide.readthedocs.io for swarm documentation. |
 
 ## Running gdbix
 
 Going through all the possible command line flags is out of scope here (please consult our
-[CLI Wiki page](https://github.com/dbix-project/go-dubaicoin/wiki/Command-Line-Options)), but we've
+[CLI Wiki page](https://github.com/ethereum/go-ethereum/wiki/Command-Line-Options)), but we've
 enumerated a few common parameter combos to get you up to speed quickly on how you can run your
-own  instance.
+own Gdbix instance.
 
 ### Full node on the main Ethereum network
 
-By far the most common scenario is people wanting to simply interact with the Ethereum network:
+By far the most common scenario is people wanting to simply interact with the Dubaicoin network:
 create accounts; transfer funds; deploy and interact with contracts. For this particular use-case
 the user doesn't care about years-old historical data, so we can fast-sync quickly to the current
 state of the network. To do so:
@@ -59,17 +62,17 @@ $ gdbix --fast --cache=512 console
 This command will:
 
  * Start gdbix in fast sync mode (`--fast`), causing it to download more data in exchange for avoiding
-   processing the entire history of the Ethereum network, which is very CPU intensive.
+   processing the entire history of the Dubaicoin network, which is very CPU intensive.
  * Bump the memory allowance of the database to 512MB (`--cache=512`), which can help significantly in
    sync times especially for HDD users. This flag is optional and you can set it as high or as low as
    you'd like, though we'd recommend the 512MB - 2GB range.
- * Start up 's built-in interactive [JavaScript console](https://github.com/dbix-project/go-dubaicoin/wiki/JavaScript-Console),
+ * Start up Gdbix's built-in interactive [JavaScript console](https://github.com/ethereum/go-ethereum/wiki/JavaScript-Console),
    (via the trailing `console` subcommand) through which you can invoke all official [`web3` methods](https://github.com/ethereum/wiki/wiki/JavaScript-API)
-   as well as 's own [management APIs](https://github.com/dbix-project/go-dubaicoin/wiki/Management-APIs).
-   This too is optional and if you leave it out you can always attach to an already running  instance
+   as well as Gdbix's own [management APIs](https://github.com/ethereum/go-ethereum/wiki/Management-APIs).
+   This too is optional and if you leave it out you can always attach to an already running Gdbix instance
    with `gdbix --attach`.
 
-### Full node on the Ethereum test network
+### Full node on the Dubaicoin test network
 
 Transitioning towards developers, if you'd like to play around with creating Ethereum contracts, you
 almost certainly would like to do that without any real money involved until you get the hang of the
@@ -84,28 +87,40 @@ The `--fast`, `--cache` flags and `console` subcommand have the exact same meani
 are equially useful on the testnet too. Please see above for their explanations if you've skipped to
 here.
 
-Specifying the `--testnet` flag however will reconfigure your  instance a bit:
+Specifying the `--testnet` flag however will reconfigure your Gdbix instance a bit:
 
- * Instead of using the default data directory (`~/.ethereum` on Linux for example),  will nest
-   itself one level deeper into a `testnet` subfolder (`~/.ethereum/testnet` on Linux).
+ * Instead of using the default data directory (`~/.dubaicoin` on Linux for example), Gdbix will nest
+   itself one level deeper into a `testnet` subfolder (`~/.dubaicoin/testnet` on Linux).
  * Instead of connecting the main Ethereum network, the client will connect to the test network,
    which uses different P2P bootnodes, different network IDs and genesis states.
 
 *Note: Although there are some internal protective measures to prevent transactions from crossing
 over between the main network and test network (different starting nonces), you should make sure to
-always use separate accounts for play-money and real-money. Unless you manually move accounts, 
+always use separate accounts for play-money and real-money. Unless you manually move accounts, Gdbix
 will by default correctly separate the two networks and will not make any accounts available between
 them.*
 
-### Programatically interfacing  nodes
+#### Docker quick start
 
-As a developer, sooner rather than later you'll want to start interacting with  and the Ethereum
-network via your own programs and not manually through the console. To aid this,  has built in
+One of the quickest ways to get Ethereum up and running on your machine is by using Docker:
+
+```
+docker run -d --name dubaicoin-node -v /Users/alice/dubaicoin:/root \
+           -p 7565:7565 -p 57955:57955 \
+           ethereum/client-go --fast --cache=512
+```
+
+This will start gdbix in fast sync mode with a DB memory allowance of 512MB just as the above command does.  It will also create a persistent volume in your home directory for saving your blockchain as well as map the default ports. There is also an `alpine` tag available for a slim version of the image.
+
+### Programatically interfacing Gdbix nodes
+
+As a developer, sooner rather than later you'll want to start interacting with Gdbix and the Dubaicoin
+network via your own programs and not manually through the console. To aid this, Gdbix has built in
 support for a JSON-RPC based APIs ([standard APIs](https://github.com/ethereum/wiki/wiki/JSON-RPC) and
-[ specific APIs](https://github.com/dbix-project/go-dubaicoin/wiki/Management-APIs)). These can be
+[Gdbix specific APIs](https://github.com/ethereum/go-ethereum/wiki/Management-APIs)). These can be
 exposed via HTTP, WebSockets and IPC (unix sockets on unix based platroms, and named pipes on Windows).
 
-The IPC interface is enabled by default and exposes all the APIs supported by , whereas the HTTP
+The IPC interface is enabled by default and exposes all the APIs supported by Gdbix, whereas the HTTP
 and WS interfaces need to manually be enabled and only expose a subset of APIs due to security reasons.
 These can be turned on/off and configured as you'd expect.
 
@@ -126,7 +141,7 @@ HTTP based JSON-RPC API options:
   * `--ipcpath` Filename for IPC socket/pipe within the datadir (explicit paths escape it)
 
 You'll need to use your own programming environments' capabilities (libraries, tools, etc) to connect
-via HTTP, WS or IPC to a  node configured with the above flags and you'll need to speak [JSON-RPC](http://www.jsonrpc.org/specification)
+via HTTP, WS or IPC to a Gdbix node configured with the above flags and you'll need to speak [JSON-RPC](http://www.jsonrpc.org/specification)
 on all transports. You can reuse the same connection for multiple requests!
 
 **Note: Please understand the security implications of opening up an HTTP/WS based transport before
@@ -170,7 +185,7 @@ configs:
 }
 ```
 
-With the genesis state defined in the above JSON file, you'll need to initialize **every**  node
+With the genesis state defined in the above JSON file, you'll need to initialize **every** Gdbix node
 with it prior to starting it up to ensure all blockchain parameters are correctly set:
 
 ```
@@ -193,12 +208,12 @@ that other nodes can use to connect to it and exchange peer information. Make su
 displayed IP address information (most probably `[::]`) with your externally accessible IP to get the
 actual `enode` URL.
 
-*Note: You could also use a full fledged  node as a bootnode, but it's the less recommended way.*
+*Note: You could also use a full fledged Gdbix node as a bootnode, but it's the less recommended way.*
 
 #### Starting up your member nodes
 
 With the bootnode operational and externally reachable (you can try `telnet <ip> <port>` to ensure
-it's indeed reachable), start every subsequent  node pointed to the bootnode for peer discovery
+it's indeed reachable), start every subsequent Gdbix node pointed to the bootnode for peer discovery
 via the `--bootnodes` flag. It will probably also be desirable to keep the data directory of your
 private network separated, so do also specify a custom `--datadir` flag.
 
@@ -218,7 +233,7 @@ repository.
 
 In a private network setting however, a single CPU miner instance is more than enough for practical
 purposes as it can produce a stable stream of blocks at the correct intervals without needing heavy
-resources (consider running on a single thread, no need for multiple ones either). To start a 
+resources (consider running on a single thread, no need for multiple ones either). To start a Gdbix
 instance for mining, run it with all your usual flags, extended by:
 
 ```
@@ -231,11 +246,12 @@ limit blocks converge to (`--targetgaslimit`) and the price transactions are acc
 
 ## Contribution
 
-`gdbix` can be configured via command line options, environment variables and config files.
+Thank you for considering to help out with the source code! We welcome contributions from
+anyone on the internet, and are grateful for even the smallest of fixes!
 
-If you'd like to contribute to go-dubaicoin, please fork, fix, commit and send a pull request
+If you'd like to contribute to go-ethereum, please fork, fix, commit and send a pull request
 for the maintainers to review and merge into the main code base. If you wish to submit more
-complex changes though, please check up with the core devs first on [our gitter channel](https://gitter.im/dbix-project/go-dubaicoin)
+complex changes though, please check up with the core devs first on [our gitter channel](https://gitter.im/ethereum/go-ethereum)
 to ensure those changes are in line with the general philosophy of the project and/or get some
 early feedback which can make both your efforts much lighter as well as our review and merge
 procedures quick and simple.
@@ -244,22 +260,21 @@ Please make sure your contributions adhere to our coding guidelines:
 
  * Code must adhere to the official Go [formatting](https://golang.org/doc/effective_go.html#formatting) guidelines (i.e. uses [gofmt](https://golang.org/cmd/gofmt/)).
  * Code must be documented adhering to the official Go [commentary](https://golang.org/doc/effective_go.html#commentary) guidelines.
- * Pull requests need to be based on and opened against the `develop` branch.
+ * Pull requests need to be based on and opened against the `master` branch.
  * Commit messages should be prefixed with the package(s) they modify.
-   * E.g. "dbix, rpc: make trace configs optional"
+   * E.g. "eth, rpc: make trace configs optional"
 
-
-Please see the [Developers' Guide](https://github.com/dbix-project/go-dubaicoin/wiki/Developers'-Guide)
+Please see the [Developers' Guide](https://github.com/ethereum/go-ethereum/wiki/Developers'-Guide)
 for more details on configuring your environment, managing project dependencies and testing procedures.
 
 ## License
 
-The go-dubaicoin library (i.e. all code outside of the `cmd` directory) is licensed under the
-[GNU Lesser General Public License v3.0](http://www.gnu.org/licenses/lgpl-3.0.en.html), also
+The go-dubaicoin code is based on go-ethereum.
+
+The go-ethereum library (i.e. all code outside of the `cmd` directory) is licensed under the
+[GNU Lesser General Public License v3.0](https://www.gnu.org/licenses/lgpl-3.0.en.html), also
 included in our repository in the `COPYING.LESSER` file.
 
-The go-dubaicoin binaries (i.e. all code inside of the `cmd` directory) is licensed under the
-[GNU General Public License v3.0](http://www.gnu.org/licenses/gpl-3.0.en.html), also included
+The go-ethereum binaries (i.e. all code inside of the `cmd` directory) is licensed under the
+[GNU General Public License v3.0](https://www.gnu.org/licenses/gpl-3.0.en.html), also included
 in our repository in the `COPYING` file.
-
-

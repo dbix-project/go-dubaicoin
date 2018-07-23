@@ -23,8 +23,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/dbix-project/go-dubaicoin/common"
-	"github.com/dbix-project/go-dubaicoin/rlp"
+	"github.com/dubaicoin-dbix/go-dubaicoin/common"
+	"github.com/dubaicoin-dbix/go-dubaicoin/rlp"
 )
 
 func init() {

@@ -21,11 +21,11 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/dbix-project/go-dubaicoin/accounts/abi"
-	"github.com/dbix-project/go-dubaicoin/common"
-	"github.com/dbix-project/go-dubaicoin/core/state"
-	"github.com/dbix-project/go-dubaicoin/core/vm"
-	"github.com/dbix-project/go-dubaicoin/ethdb"
+	"github.com/dubaicoin-dbix/go-dubaicoin/accounts/abi"
+	"github.com/dubaicoin-dbix/go-dubaicoin/common"
+	"github.com/dubaicoin-dbix/go-dubaicoin/core/state"
+	"github.com/dubaicoin-dbix/go-dubaicoin/core/vm"
+	"github.com/dubaicoin-dbix/go-dubaicoin/dbixdb"
 )
 
 func TestDefaults(t *testing.T) {
@@ -56,7 +56,7 @@ func TestDefaults(t *testing.T) {
 	}
 }
 
-func TestEnvironment(t *testing.T) {
+func TestEVM(t *testing.T) {
 	defer func() {
 		if r := recover(); r != nil {
 			t.Fatalf("crashed with: %v", r)

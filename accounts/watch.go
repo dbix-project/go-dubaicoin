@@ -14,15 +14,15 @@
 // You should have received a copy of the GNU Lesser General Public License
 // along with the go-ethereum library. If not, see <http://www.gnu.org/licenses/>.
 
-// +build darwin,!ios freebsd linux,!arm64 netbsd solaris windows
+// +build darwin,!ios freebsd linux,!arm64 netbsd solaris
 
 package accounts
 
 import (
 	"time"
 
-	"github.com/dbix-project/go-dubaicoin/logger"
-	"github.com/dbix-project/go-dubaicoin/logger/glog"
+	"github.com/dubaicoin-dbix/go-dubaicoin/logger"
+	"github.com/dubaicoin-dbix/go-dubaicoin/logger/glog"
 	"github.com/rjeczalik/notify"
 )
 

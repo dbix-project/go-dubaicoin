@@ -1,20 +1,20 @@
-// Copyright 2014 The go-ethereum Authors && Copyright 2015 go-dubaicoin Authors
-// This file is part of the go-dubaicoin library.
+// Copyright 2014 The go-ethereum Authors
+// This file is part of the go-ethereum library.
 //
-// The go-dubaicoin library is free software: you can redistribute it and/or modify
+// The go-ethereum library is free software: you can redistribute it and/or modify
 // it under the terms of the GNU Lesser General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
 //
-// The go-dubaicoin library is distributed in the hope that it will be useful,
+// The go-ethereum library is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
 // GNU Lesser General Public License for more details.
 //
 // You should have received a copy of the GNU Lesser General Public License
-// along with the go-dubaicoin library. If not, see <http://www.gnu.org/licenses/>.
+// along with the go-ethereum library. If not, see <http://www.gnu.org/licenses/>.
 
-package dbix
+package eth
 
 import (
 	"fmt"
@@ -22,11 +22,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/dbix-project/go-dubaicoin/common"
-	"github.com/dbix-project/go-dubaicoin/core/types"
-	"github.com/dbix-project/go-dubaicoin/crypto"
-	"github.com/dbix-project/go-dubaicoin/p2p"
-	"github.com/dbix-project/go-dubaicoin/rlp"
+	"github.com/dubaicoin-dbix/go-dubaicoin/common"
+	"github.com/dubaicoin-dbix/go-dubaicoin/core/types"
+	"github.com/dubaicoin-dbix/go-dubaicoin/crypto"
+	"github.com/dubaicoin-dbix/go-dubaicoin/p2p"
+	"github.com/dubaicoin-dbix/go-dubaicoin/rlp"
 )
 
 func init() {
@@ -82,7 +82,7 @@ func testStatusMsgErrors(t *testing.T, protocol int) {
 				t.Errorf("test %d: wrong error: got %q, want %q", i, err, test.wantError)
 			}
 		case <-time.After(2 * time.Second):
-			t.Errorf("protocol did not shut down withing 2 seconds")
+			t.Errorf("protocol did not shut down within 2 seconds")
 		}
 		p.close()
 	}
@@ -178,7 +178,7 @@ func testSendTransactions(t *testing.T, protocol int) {
 func TestGetBlockHeadersDataEncodeDecode(t *testing.T) {
 	// Create a "random" hash for testing
 	var hash common.Hash
-	for i, _ := range hash {
+	for i := range hash {
 		hash[i] = byte(i)
 	}
 	// Assemble some table driven tests

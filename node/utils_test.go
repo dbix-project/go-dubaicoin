@@ -22,8 +22,8 @@ package node
 import (
 	"reflect"
 
-	"github.com/dbix-project/go-dubaicoin/p2p"
-	"github.com/dbix-project/go-dubaicoin/rpc"
+	"github.com/dubaicoin-dbix/go-dubaicoin/p2p"
+	"github.com/dubaicoin-dbix/go-dubaicoin/rpc"
 )
 
 // NoopService is a trivial implementation of the Service interface.

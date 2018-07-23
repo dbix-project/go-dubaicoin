@@ -16,7 +16,7 @@
 
 package bind
 
-import "github.com/dbix-project/go-dubaicoin/accounts/abi"
+import "github.com/dubaicoin-dbix/go-dubaicoin/accounts/abi"
 
 // tmplData is the data structure required to fill the binding template.
 type tmplData struct {
@@ -42,9 +42,16 @@ type tmplMethod struct {
 	Structured bool       // Whether the returns should be accumulated into a contract
 }
 
-// tmplSource is the Go source template use to generate the contract binding
+// tmplSource is language to template mapping containing all the supported
+// programming languages the package can generate to.
+var tmplSource = map[Lang]string{
+	LangGo:   tmplSourceGo,
+	LangJava: tmplSourceJava,
+}
+
+// tmplSourceGo is the Go source template use to generate the contract binding
 // based on.
-const tmplSource = `
+const tmplSourceGo = `
 // This file is an automatically generated Go binding. Do not modify as any
 // change will likely be lost upon the next re-generation!
 
@@ -52,13 +59,13 @@ package {{.Package}}
 
 {{range $contract := .Contracts}}
 	// {{.Type}}ABI is the input ABI used to generate the binding from.
-	const {{.Type}}ABI = ` + "`" + `{{.InputABI}}` + "`" + `
+	const {{.Type}}ABI = "{{.InputABI}}"
 
 	{{if .InputBin}}
 		// {{.Type}}Bin is the compiled bytecode used for deploying new contracts.
 		const {{.Type}}Bin = ` + "`" + `{{.InputBin}}` + "`" + `
 
-		// Deploy{{.Type}} deploys a new Dubaicoin contract, binding an instance of {{.Type}} to it.
+		// Deploy{{.Type}} deploys a new Ethereum contract, binding an instance of {{.Type}} to it.
 		func Deploy{{.Type}}(auth *bind.TransactOpts, backend bind.ContractBackend {{range .Constructor.Inputs}}, {{.Name}} {{bindtype .Type}}{{end}}) (common.Address, *types.Transaction, *{{.Type}}, error) {
 		  parsed, err := abi.JSON(strings.NewReader({{.Type}}ABI))
 		  if err != nil {
@@ -72,23 +79,23 @@ package {{.Package}}
 		}
 	{{end}}
 
-	// {{.Type}} is an auto generated Go binding around an Dubaicoin contract.
+	// {{.Type}} is an auto generated Go binding around a Dubaicoin contract.
 	type {{.Type}} struct {
 	  {{.Type}}Caller     // Read-only binding to the contract
 	  {{.Type}}Transactor // Write-only binding to the contract
 	}
 
-	// {{.Type}}Caller is an auto generated read-only Go binding around an Dubaicoin contract.
+	// {{.Type}}Caller is an auto generated read-only Go binding around a Dubaicoin contract.
 	type {{.Type}}Caller struct {
 	  contract *bind.BoundContract // Generic contract wrapper for the low level calls
 	}
 
-	// {{.Type}}Transactor is an auto generated write-only Go binding around an Dubaicoin contract.
+	// {{.Type}}Transactor is an auto generated write-only Go binding around a Dubaicoin contract.
 	type {{.Type}}Transactor struct {
 	  contract *bind.BoundContract // Generic contract wrapper for the low level calls
 	}
 
-	// {{.Type}}Session is an auto generated Go binding around an Dubaicoin contract,
+	// {{.Type}}Session is an auto generated Go binding around a Dubaicoin contract,
 	// with pre-set call and transact options.
 	type {{.Type}}Session struct {
 	  Contract     *{{.Type}}        // Generic contract binding to set the session for
@@ -96,38 +103,38 @@ package {{.Package}}
 	  TransactOpts bind.TransactOpts // Transaction auth options to use throughout this session
 	}
 
-	// {{.Type}}CallerSession is an auto generated read-only Go binding around an Dubaicoin contract,
+	// {{.Type}}CallerSession is an auto generated read-only Go binding around a Dubaicoin contract,
 	// with pre-set call options.
 	type {{.Type}}CallerSession struct {
 	  Contract *{{.Type}}Caller // Generic contract caller binding to set the session for
 	  CallOpts bind.CallOpts    // Call options to use throughout this session
 	}
 
-	// {{.Type}}TransactorSession is an auto generated write-only Go binding around an Dubaicoin contract,
+	// {{.Type}}TransactorSession is an auto generated write-only Go binding around a Dubaicoin contract,
 	// with pre-set transact options.
 	type {{.Type}}TransactorSession struct {
 	  Contract     *{{.Type}}Transactor // Generic contract transactor binding to set the session for
 	  TransactOpts bind.TransactOpts    // Transaction auth options to use throughout this session
 	}
 
-	// {{.Type}}Raw is an auto generated low-level Go binding around an Dubaicoin contract.
+	// {{.Type}}Raw is an auto generated low-level Go binding around a Dubaicoin contract.
 	type {{.Type}}Raw struct {
 	  Contract *{{.Type}} // Generic contract binding to access the raw methods on
 	}
 
-	// {{.Type}}CallerRaw is an auto generated low-level read-only Go binding around an Dubaicoin contract.
+	// {{.Type}}CallerRaw is an auto generated low-level read-only Go binding around a Dubaicoin contract.
 	type {{.Type}}CallerRaw struct {
 		Contract *{{.Type}}Caller // Generic read-only contract binding to access the raw methods on
 	}
 
-	// {{.Type}}TransactorRaw is an auto generated low-level write-only Go binding around an Dubaicoin contract.
+	// {{.Type}}TransactorRaw is an auto generated low-level write-only Go binding around a Dubaicoin contract.
 	type {{.Type}}TransactorRaw struct {
 		Contract *{{.Type}}Transactor // Generic write-only contract binding to access the raw methods on
 	}
 
 	// New{{.Type}} creates a new instance of {{.Type}}, bound to a specific deployed contract.
 	func New{{.Type}}(address common.Address, backend bind.ContractBackend) (*{{.Type}}, error) {
-	  contract, err := bind{{.Type}}(address, backend.(bind.ContractCaller), backend.(bind.ContractTransactor))
+	  contract, err := bind{{.Type}}(address, backend, backend)
 	  if err != nil {
 	    return nil, err
 	  }
@@ -256,5 +263,107 @@ package {{.Package}}
 		  return _{{$contract.Type}}.Contract.{{.Normalized.Name}}(&_{{$contract.Type}}.TransactOpts {{range $i, $_ := .Normalized.Inputs}}, {{.Name}}{{end}})
 		}
 	{{end}}
+{{end}}
+`
+
+// tmplSourceJava is the Java source template use to generate the contract binding
+// based on.
+const tmplSourceJava = `
+// This file is an automatically generated Java binding. Do not modify as any
+// change will likely be lost upon the next re-generation!
+
+package {{.Package}};
+
+import org.dubaicoin.gdbix.*;
+import org.dubaicoin.gdbix.internal.*;
+
+{{range $contract := .Contracts}}
+	public class {{.Type}} {
+		// ABI is the input ABI used to generate the binding from.
+		public final static String ABI = "{{.InputABI}}";
+
+		{{if .InputBin}}
+			// BYTECODE is the compiled bytecode used for deploying new contracts.
+			public final static byte[] BYTECODE = "{{.InputBin}}".getBytes();
+
+			// deploy deploys a new Ethereum contract, binding an instance of {{.Type}} to it.
+			public static {{.Type}} deploy(TransactOpts auth, EthereumClient client{{range .Constructor.Inputs}}, {{bindtype .Type}} {{.Name}}{{end}}) throws Exception {
+				Interfaces args = Gdbix.newInterfaces({{(len .Constructor.Inputs)}});
+				{{range $index, $element := .Constructor.Inputs}}
+				  args.set({{$index}}, Gdbix.newInterface()); args.get({{$index}}).set{{namedtype (bindtype .Type) .Type}}({{.Name}});
+				{{end}}
+				return new {{.Type}}(Gdbix.deployContract(auth, ABI, BYTECODE, client, args));
+			}
+
+			// Internal constructor used by contract deployment.
+			private {{.Type}}(BoundContract deployment) {
+				this.Address  = deployment.getAddress();
+				this.Deployer = deployment.getDeployer();
+				this.Contract = deployment;
+			}
+		{{end}}
+
+		// Dubaicoin address where this contract is located at.
+		public final Address Address;
+
+		// Ethereum transaction in which this contract was deployed (if known!).
+		public final Transaction Deployer;
+
+		// Contract instance bound to a blockchain address.
+		private final BoundContract Contract;
+
+		// Creates a new instance of {{.Type}}, bound to a specific deployed contract.
+		public {{.Type}}(Address address, EthereumClient client) throws Exception {
+			this(Gdbix.bindContract(address, ABI, client));
+		}
+
+		{{range .Calls}}
+			{{if gt (len .Normalized.Outputs) 1}}
+			// {{capitalise .Normalized.Name}}Results is the output of a call to {{.Normalized.Name}}.
+			public class {{capitalise .Normalized.Name}}Results {
+				{{range $index, $item := .Normalized.Outputs}}public {{bindtype .Type}} {{if ne .Name ""}}{{.Name}}{{else}}Return{{$index}}{{end}};
+				{{end}}
+			}
+			{{end}}
+
+			// {{.Normalized.Name}} is a free data retrieval call binding the contract method 0x{{printf "%x" .Original.Id}}.
+			//
+			// Solidity: {{.Original.String}}
+			public {{if gt (len .Normalized.Outputs) 1}}{{capitalise .Normalized.Name}}Results{{else}}{{range .Normalized.Outputs}}{{bindtype .Type}}{{end}}{{end}} {{.Normalized.Name}}(CallOpts opts{{range .Normalized.Inputs}}, {{bindtype .Type}} {{.Name}}{{end}}) throws Exception {
+				Interfaces args = Gdbix.newInterfaces({{(len .Normalized.Inputs)}});
+				{{range $index, $item := .Normalized.Inputs}}args.set({{$index}}, Gdbix.newInterface()); args.get({{$index}}).set{{namedtype (bindtype .Type) .Type}}({{.Name}});
+				{{end}}
+
+				Interfaces results = Gdbix.newInterfaces({{(len .Normalized.Outputs)}});
+				{{range $index, $item := .Normalized.Outputs}}Interface result{{$index}} = Gdbix.newInterface(); result{{$index}}.setDefault{{namedtype (bindtype .Type) .Type}}(); results.set({{$index}}, result{{$index}});
+				{{end}}
+
+				if (opts == null) {
+					opts = Gdbix.newCallOpts();
+				}
+				this.Contract.call(opts, results, "{{.Original.Name}}", args);
+				{{if gt (len .Normalized.Outputs) 1}}
+					{{capitalise .Normalized.Name}}Results result = new {{capitalise .Normalized.Name}}Results();
+					{{range $index, $item := .Normalized.Outputs}}result.{{if ne .Name ""}}{{.Name}}{{else}}Return{{$index}}{{end}} = results.get({{$index}}).get{{namedtype (bindtype .Type) .Type}}();
+					{{end}}
+					return result;
+				{{else}}{{range .Normalized.Outputs}}return results.get(0).get{{namedtype (bindtype .Type) .Type}}();{{end}}
+				{{end}}
+			}
+		{{end}}
+
+		{{range .Transacts}}
+			// {{.Normalized.Name}} is a paid mutator transaction binding the contract method 0x{{printf "%x" .Original.Id}}.
+			//
+			// Solidity: {{.Original.String}}
+			public Transaction {{.Normalized.Name}}(TransactOpts opts{{range .Normalized.Inputs}}, {{bindtype .Type}} {{.Name}}{{end}}) throws Exception {
+				Interfaces args = Gdbix.newInterfaces({{(len .Normalized.Inputs)}});
+				{{range $index, $item := .Normalized.Inputs}}args.set({{$index}}, Gdbix.newInterface()); args.get({{$index}}).set{{namedtype (bindtype .Type) .Type}}({{.Name}});
+				{{end}}
+
+				return this.Contract.transact(opts, "{{.Original.Name}}"	, args);
+			}
+		{{end}}
+	}
 {{end}}
 `

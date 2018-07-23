@@ -21,8 +21,8 @@ import (
 	"math/rand"
 	"testing"
 
-	"github.com/dbix-project/go-dubaicoin/core/types"
-	"github.com/dbix-project/go-dubaicoin/crypto"
+	"github.com/dubaicoin-dbix/go-dubaicoin/core/types"
+	"github.com/dubaicoin-dbix/go-dubaicoin/crypto"
 )
 
 // Tests that transactions can be added to strict lists and list contents and

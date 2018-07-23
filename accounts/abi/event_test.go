@@ -20,8 +20,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/dbix-project/go-dubaicoin/common"
-	"github.com/dbix-project/go-dubaicoin/crypto"
+	"github.com/dubaicoin-dbix/go-dubaicoin/common"
+	"github.com/dubaicoin-dbix/go-dubaicoin/crypto"
 )
 
 func TestEventId(t *testing.T) {

@@ -22,14 +22,14 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/dbix-project/go-dubaicoin/common"
-	"github.com/dbix-project/go-dubaicoin/crypto"
-	"github.com/dbix-project/go-dubaicoin/ethdb"
+	"github.com/dubaicoin-dbix/go-dubaicoin/common"
+	"github.com/dubaicoin-dbix/go-dubaicoin/crypto"
+	"github.com/dubaicoin-dbix/go-dubaicoin/dbixdb"
 )
 
 func newEmptySecure() *SecureTrie {
 	db, _ := ethdb.NewMemDatabase()
-	trie, _ := NewSecure(common.Hash{}, db)
+	trie, _ := NewSecure(common.Hash{}, db, 0)
 	return trie
 }
 
@@ -37,7 +37,7 @@ func newEmptySecure() *SecureTrie {
 func makeTestSecureTrie() (ethdb.Database, *SecureTrie, map[string][]byte) {
 	// Create an empty trie
 	db, _ := ethdb.NewMemDatabase()
-	trie, _ := NewSecure(common.Hash{}, db)
+	trie, _ := NewSecure(common.Hash{}, db, 0)
 
 	// Fill it with some arbitrary data
 	content := make(map[string][]byte)

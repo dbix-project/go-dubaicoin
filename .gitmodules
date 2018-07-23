@@ -1,3 +1,0 @@
-[submodule "cmd/mist/assets/ext/dubaicoin.js"]
-	path = cmd/mist/assets/ext/dubaicoin.js
-	url = https://github.com/dbix-project/web3.js

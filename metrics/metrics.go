@@ -1,18 +1,18 @@
-// Copyright 2015 The go-dubaicoin Authors
-// This file is part of the go-dubaicoin library.
+// Copyright 2015 The go-ethereum Authors
+// This file is part of the go-ethereum library.
 //
-// The go-dubaicoin library is free software: you can redistribute it and/or modify
+// The go-ethereum library is free software: you can redistribute it and/or modify
 // it under the terms of the GNU Lesser General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
 //
-// The go-dubaicoin library is distributed in the hope that it will be useful,
+// The go-ethereum library is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
 // GNU Lesser General Public License for more details.
 //
 // You should have received a copy of the GNU Lesser General Public License
-// along with the go-dubaicoin library. If not, see <http://www.gnu.org/licenses/>.
+// along with the go-ethereum library. If not, see <http://www.gnu.org/licenses/>.
 
 // Package metrics provides general system and process level metrics collection.
 package metrics
@@ -23,9 +23,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/dbix-project/go-dubaicoin/logger"
-	"github.com/dbix-project/go-dubaicoin/logger/glog"
+	"github.com/dubaicoin-dbix/go-dubaicoin/logger"
+	"github.com/dubaicoin-dbix/go-dubaicoin/logger/glog"
 	"github.com/rcrowley/go-metrics"
+	"github.com/rcrowley/go-metrics/exp"
 )
 
 // MetricsEnabledFlag is the CLI flag name to use to enable metrics collections.
@@ -44,6 +45,16 @@ func init() {
 			Enabled = true
 		}
 	}
+	exp.Exp(metrics.DefaultRegistry)
+}
+
+// NewCounter create a new metrics Counter, either a real one of a NOP stub depending
+// on the metrics flag.
+func NewCounter(name string) metrics.Counter {
+	if !Enabled {
+		return new(metrics.NilCounter)
+	}
+	return metrics.GetOrRegisterCounter(name, metrics.DefaultRegistry)
 }
 
 // NewMeter create a new metrics Meter, either a real one of a NOP stub depending

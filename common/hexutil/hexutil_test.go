@@ -1,23 +1,24 @@
-// Copyright 2016 The go-dubaicoin Authors
-// This file is part of the go-dubaicoin library.
+// Copyright 2016 The go-ethereum Authors
+// This file is part of the go-ethereum library.
 //
-// The go-dubaicoin library is free software: you can redistribute it and/or modify
+// The go-ethereum library is free software: you can redistribute it and/or modify
 // it under the terms of the GNU Lesser General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
 //
-// The go-dubaicoin library is distributed in the hope that it will be useful,
+// The go-ethereum library is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
 // GNU Lesser General Public License for more details.
 //
 // You should have received a copy of the GNU Lesser General Public License
-// along with the go-dubaicoin library. If not, see <http://www.gnu.org/licenses/>.
+// along with the go-ethereum library. If not, see <http://www.gnu.org/licenses/>.
 
 package hexutil
 
 import (
 	"bytes"
+	"encoding/hex"
 	"math/big"
 	"testing"
 )
@@ -28,10 +29,9 @@ type marshalTest struct {
 }
 
 type unmarshalTest struct {
-	input        string
-	want         interface{}
-	wantErr      error // if set, decoding must fail on any platform
-	wantErr32bit error // if set, decoding must fail on 32bit platforms (used for Uint tests)
+	input   string
+	want    interface{}
+	wantErr error
 }
 
 var (
@@ -47,7 +47,6 @@ var (
 		{referenceBig("ff"), "0xff"},
 		{referenceBig("112233445566778899aabbccddeeff"), "0x112233445566778899aabbccddeeff"},
 		{referenceBig("80a7f2c1bcc396c00"), "0x80a7f2c1bcc396c00"},
-		{referenceBig("-80a7f2c1bcc396c00"), "-0x80a7f2c1bcc396c00"},
 	}
 
 	encodeUint64Tests = []marshalTest{
@@ -57,21 +56,14 @@ var (
 		{uint64(0x1122334455667788), "0x1122334455667788"},
 	}
 
-	encodeUintTests = []marshalTest{
-		{uint(0), "0x0"},
-		{uint(1), "0x1"},
-		{uint(0xff), "0xff"},
-		{uint(0x11223344), "0x11223344"},
-	}
-
 	decodeBytesTests = []unmarshalTest{
 		// invalid
 		{input: ``, wantErr: ErrEmptyString},
 		{input: `0`, wantErr: ErrMissingPrefix},
-		{input: `0x0`, wantErr: ErrOddLength},
-		{input: `0x023`, wantErr: ErrOddLength},
-		{input: `0xxx`, wantErr: ErrSyntax},
-		{input: `0x01zz01`, wantErr: ErrSyntax},
+		{input: `0x0`, wantErr: hex.ErrLength},
+		{input: `0x023`, wantErr: hex.ErrLength},
+		{input: `0xxx`, wantErr: hex.InvalidByteError('x')},
+		{input: `0x01zz01`, wantErr: hex.InvalidByteError('z')},
 		// valid
 		{input: `0x`, want: []byte{}},
 		{input: `0X`, want: []byte{}},
@@ -91,10 +83,6 @@ var (
 		{input: `0x01`, wantErr: ErrLeadingZero},
 		{input: `0xx`, wantErr: ErrSyntax},
 		{input: `0x1zz01`, wantErr: ErrSyntax},
-		{
-			input:   `0x10000000000000000000000000000000000000000000000000000000000000000`,
-			wantErr: ErrBig256Range,
-		},
 		// valid
 		{input: `0x0`, want: big.NewInt(0)},
 		{input: `0x2`, want: big.NewInt(0x2)},
@@ -110,10 +98,6 @@ var (
 		{
 			input: `0xffffffffffffffffffffffffffffffffffff`,
 			want:  referenceBig("ffffffffffffffffffffffffffffffffffff"),
-		},
-		{
-			input: `0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff`,
-			want:  referenceBig("ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"),
 		},
 	}
 

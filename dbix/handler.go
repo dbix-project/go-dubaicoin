@@ -1,20 +1,20 @@
-// Copyright 2015 The go-dubaicoin Authors
-// This file is part of the go-dubaicoin library.
+// Copyright 2015 The go-ethereum Authors
+// This file is part of the go-ethereum library.
 //
-// The go-dubaicoin library is free software: you can redistribute it and/or modify
+// The go-ethereum library is free software: you can redistribute it and/or modify
 // it under the terms of the GNU Lesser General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
 //
-// The go-dubaicoin library is distributed in the hope that it will be useful,
+// The go-ethereum library is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
 // GNU Lesser General Public License for more details.
 //
 // You should have received a copy of the GNU Lesser General Public License
-// along with the go-dubaicoin library. If not, see <http://www.gnu.org/licenses/>.
+// along with the go-ethereum library. If not, see <http://www.gnu.org/licenses/>.
 
-package dbix
+package eth
 
 import (
 	"encoding/json"
@@ -26,19 +26,20 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/dbix-project/go-dubaicoin/common"
-	"github.com/dbix-project/go-dubaicoin/core"
-	"github.com/dbix-project/go-dubaicoin/core/types"
-	"github.com/dbix-project/go-dubaicoin/dbix/downloader"
-	"github.com/dbix-project/go-dubaicoin/dbix/fetcher"
-	"github.com/dbix-project/go-dubaicoin/ethdb"
-	"github.com/dbix-project/go-dubaicoin/event"
-	"github.com/dbix-project/go-dubaicoin/logger"
-	"github.com/dbix-project/go-dubaicoin/logger/glog"
-	"github.com/dbix-project/go-dubaicoin/p2p"
-	"github.com/dbix-project/go-dubaicoin/p2p/discover"
-	"github.com/dbix-project/go-dubaicoin/pow"
-	"github.com/dbix-project/go-dubaicoin/rlp"
+	"github.com/dubaicoin-dbix/go-dubaicoin/common"
+	"github.com/dubaicoin-dbix/go-dubaicoin/core"
+	"github.com/dubaicoin-dbix/go-dubaicoin/core/types"
+	"github.com/dubaicoin-dbix/go-dubaicoin/dbix/downloader"
+	"github.com/dubaicoin-dbix/go-dubaicoin/dbix/fetcher"
+	"github.com/dubaicoin-dbix/go-dubaicoin/dbixdb"
+	"github.com/dubaicoin-dbix/go-dubaicoin/event"
+	"github.com/dubaicoin-dbix/go-dubaicoin/logger"
+	"github.com/dubaicoin-dbix/go-dubaicoin/logger/glog"
+	"github.com/dubaicoin-dbix/go-dubaicoin/p2p"
+	"github.com/dubaicoin-dbix/go-dubaicoin/p2p/discover"
+	"github.com/dubaicoin-dbix/go-dubaicoin/params"
+	"github.com/dubaicoin-dbix/go-dubaicoin/pow"
+	"github.com/dubaicoin-dbix/go-dubaicoin/rlp"
 )
 
 const (
@@ -67,7 +68,8 @@ type ProtocolManager struct {
 	txpool      txPool
 	blockchain  *core.BlockChain
 	chaindb     ethdb.Database
-	chainconfig *core.ChainConfig
+	chainconfig *params.ChainConfig
+	maxPeers    int
 
 	downloader *downloader.Downloader
 	fetcher    *fetcher.Fetcher
@@ -85,6 +87,8 @@ type ProtocolManager struct {
 	quitSync    chan struct{}
 	noMorePeers chan struct{}
 
+	lesServer LesServer
+
 	// wait group is used for graceful shutdowns during downloading
 	// and processing
 	wg sync.WaitGroup
@@ -92,9 +96,9 @@ type ProtocolManager struct {
 	badBlockReportingEnabled bool
 }
 
-// NewProtocolManager returns a new dubaicoin sub protocol manager. The Dubaicoin sub protocol manages peers capable
+// NewProtocolManager returns a new ethereum sub protocol manager. The Ethereum sub protocol manages peers capable
 // with the dubaicoin network.
-func NewProtocolManager(config *core.ChainConfig, fastSync bool, networkId int, mux *event.TypeMux, txpool txPool, pow pow.PoW, blockchain *core.BlockChain, chaindb ethdb.Database) (*ProtocolManager, error) {
+func NewProtocolManager(config *params.ChainConfig, fastSync bool, networkId int, maxPeers int, mux *event.TypeMux, txpool txPool, pow pow.PoW, blockchain *core.BlockChain, chaindb ethdb.Database) (*ProtocolManager, error) {
 	// Create the protocol manager with the base fields
 	manager := &ProtocolManager{
 		networkId:   networkId,
@@ -103,6 +107,7 @@ func NewProtocolManager(config *core.ChainConfig, fastSync bool, networkId int, 
 		blockchain:  blockchain,
 		chaindb:     chaindb,
 		chainconfig: config,
+		maxPeers:    maxPeers,
 		peers:       newPeerSet(),
 		newPeerCh:   make(chan *peer),
 		noMorePeers: make(chan struct{}),
@@ -118,7 +123,6 @@ func NewProtocolManager(config *core.ChainConfig, fastSync bool, networkId int, 
 		manager.fastSync = uint32(1)
 	}
 	// Initiate a sub-protocol for every implemented version we can handle
-
 	manager.SubProtocols = make([]p2p.Protocol, 0, len(ProtocolVersions))
 	for i, version := range ProtocolVersions {
 		// Skip protocol version if incompatible with the mode of operation
@@ -128,7 +132,6 @@ func NewProtocolManager(config *core.ChainConfig, fastSync bool, networkId int, 
 		// Compatible; initialise the sub-protocol
 		version := version // Closure for the run
 		manager.SubProtocols = append(manager.SubProtocols, p2p.Protocol{
-
 			Name:    ProtocolName,
 			Version: version,
 			Length:  ProtocolLengths[i],
@@ -158,14 +161,14 @@ func NewProtocolManager(config *core.ChainConfig, fastSync bool, networkId int, 
 		return nil, errIncompatibleConfig
 	}
 	// Construct the different synchronisation mechanisms
-	manager.downloader = downloader.New(chaindb, manager.eventMux, blockchain.HasHeader, blockchain.HasBlockAndState, blockchain.GetHeader,
-		blockchain.GetBlock, blockchain.CurrentHeader, blockchain.CurrentBlock, blockchain.CurrentFastBlock, blockchain.FastSyncCommitHead,
-		blockchain.GetTd, blockchain.InsertHeaderChain, manager.insertChain, blockchain.InsertReceiptChain, blockchain.Rollback,
+	manager.downloader = downloader.New(downloader.FullSync, chaindb, manager.eventMux, blockchain.HasHeader, blockchain.HasBlockAndState, blockchain.GetHeaderByHash,
+		blockchain.GetBlockByHash, blockchain.CurrentHeader, blockchain.CurrentBlock, blockchain.CurrentFastBlock, blockchain.FastSyncCommitHead,
+		blockchain.GetTdByHash, blockchain.InsertHeaderChain, manager.insertChain, blockchain.InsertReceiptChain, blockchain.Rollback,
 		manager.removePeer)
 
 	validator := func(block *types.Block, parent *types.Block) error {
-		return core.ValidateHeader(config, pow, block.Header(), parent.Header(), true, false)
-	}
+		return core.ValidateHeader(config, pow, block.Header(), parent.Header(), true, false, blockchain)
+	} // FluxDbix
 	heighter := func() uint64 {
 		return blockchain.CurrentBlock().NumberU64()
 	}
@@ -173,7 +176,7 @@ func NewProtocolManager(config *core.ChainConfig, fastSync bool, networkId int, 
 		atomic.StoreUint32(&manager.synced, 1) // Mark initial sync done on any fetcher import
 		return manager.insertChain(blocks)
 	}
-	manager.fetcher = fetcher.New(blockchain.GetBlock, validator, manager.BroadcastBlock, heighter, inserter, manager.removePeer)
+	manager.fetcher = fetcher.New(blockchain.GetBlockByHash, validator, manager.BroadcastBlock, heighter, inserter, manager.removePeer)
 
 	if blockchain.Genesis().Hash().Hex() == defaultGenesisHash && networkId == 7995 {
 		glog.V(logger.Debug).Infoln("Bad Block Reporting is enabled")
@@ -199,7 +202,7 @@ func (pm *ProtocolManager) removePeer(id string) {
 	}
 	glog.V(logger.Debug).Infoln("Removing peer", id)
 
-	// Unregister the peer from the downloader and Dubaicoin peer set
+	// Unregister the peer from the downloader and Ethereum peer set
 	pm.downloader.UnregisterPeer(id)
 	if err := pm.peers.Unregister(id); err != nil {
 		glog.V(logger.Error).Infoln("Removal failed:", err)
@@ -252,9 +255,13 @@ func (pm *ProtocolManager) newPeer(pv int, p *p2p.Peer, rw p2p.MsgReadWriter) *p
 	return newPeer(pv, p, newMeteredMsgWriter(rw))
 }
 
-// handle is the callback invoked to manage the life cycle of an dbix peer. When
+// handle is the callback invoked to manage the life cycle of an eth peer. When
 // this function terminates, the peer is disconnected.
 func (pm *ProtocolManager) handle(p *peer) error {
+	if pm.peers.Len() >= pm.maxPeers {
+		return p2p.DiscTooManyPeers
+	}
+
 	glog.V(logger.Debug).Infof("%v: peer connected [%s]", p, p.Name())
 
 	// Execute the Dubaicoin handshake
@@ -290,7 +297,7 @@ func (pm *ProtocolManager) handle(p *peer) error {
 		}
 		// Start a timer to disconnect if the peer doesn't reply in time
 		p.forkDrop = time.AfterFunc(daoChallengeTimeout, func() {
-			glog.V(logger.Warn).Infof("%v: timed out DAO fork-check, dropping", p)
+			glog.V(logger.Debug).Infof("%v: timed out DAO fork-check, dropping", p)
 			pm.removePeer(p.id)
 		})
 		// Make sure it's cleaned up if the peer dies off
@@ -348,13 +355,14 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 			// Retrieve the next header satisfying the query
 			var origin *types.Header
 			if hashMode {
-				origin = pm.blockchain.GetHeader(query.Origin.Hash)
+				origin = pm.blockchain.GetHeaderByHash(query.Origin.Hash)
 			} else {
 				origin = pm.blockchain.GetHeaderByNumber(query.Origin.Number)
 			}
 			if origin == nil {
 				break
 			}
+			number := origin.Number.Uint64()
 			headers = append(headers, origin)
 			bytes += estHeaderRlpSize
 
@@ -363,8 +371,9 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 			case query.Origin.Hash != (common.Hash{}) && query.Reverse:
 				// Hash based traversal towards the genesis block
 				for i := 0; i < int(query.Skip)+1; i++ {
-					if header := pm.blockchain.GetHeader(query.Origin.Hash); header != nil {
+					if header := pm.blockchain.GetHeader(query.Origin.Hash, number); header != nil {
 						query.Origin.Hash = header.ParentHash
+						number--
 					} else {
 						unknown = true
 						break
@@ -420,7 +429,7 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 			// If we already have a DAO header, we can check the peer's TD against it. If
 			// the peer's ahead of this, it too must have a reply to the DAO check
 			if daoHeader := pm.blockchain.GetHeaderByNumber(pm.chainconfig.DAOForkBlock.Uint64()); daoHeader != nil {
-				if _, td := p.Head(); td.Cmp(pm.blockchain.GetTd(daoHeader.Hash())) >= 0 {
+				if _, td := p.Head(); td.Cmp(pm.blockchain.GetTd(daoHeader.Hash(), daoHeader.Number.Uint64())) >= 0 {
 					verifyDAO = false
 				}
 			}
@@ -570,9 +579,9 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 				return errResp(ErrDecode, "msg %v: %v", msg, err)
 			}
 			// Retrieve the requested block's receipts, skipping if unknown to us
-			results := core.GetBlockReceipts(pm.chaindb, hash)
+			results := core.GetBlockReceipts(pm.chaindb, hash, core.GetBlockNumber(pm.chaindb, hash))
 			if results == nil {
-				if header := pm.blockchain.GetHeader(hash); header == nil || header.ReceiptHash != types.EmptyRootHash {
+				if header := pm.blockchain.GetHeaderByHash(hash); header == nil || header.ReceiptHash != types.EmptyRootHash {
 					continue
 				}
 			}
@@ -598,38 +607,16 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 		}
 
 	case msg.Code == NewBlockHashesMsg:
-		// Retrieve and deserialize the remote new block hashes notification
-		type announce struct {
-			Hash   common.Hash
-			Number uint64
-		}
-		var announces = []announce{}
-
-		if p.version < eth62 {
-			// We're running the old protocol, make block number unknown (0)
-			var hashes []common.Hash
-			if err := msg.Decode(&hashes); err != nil {
-				return errResp(ErrDecode, "%v: %v", msg, err)
-			}
-			for _, hash := range hashes {
-				announces = append(announces, announce{hash, 0})
-			}
-		} else {
-			// Otherwise extract both block hash and number
-			var request newBlockHashesData
-			if err := msg.Decode(&request); err != nil {
-				return errResp(ErrDecode, "%v: %v", msg, err)
-			}
-			for _, block := range request {
-				announces = append(announces, announce{block.Hash, block.Number})
-			}
+		var announces newBlockHashesData
+		if err := msg.Decode(&announces); err != nil {
+			return errResp(ErrDecode, "%v: %v", msg, err)
 		}
 		// Mark the hashes as present at the remote node
 		for _, block := range announces {
 			p.MarkBlock(block.Hash)
 		}
 		// Schedule all the unknown hashes for retrieval
-		unknown := make([]announce, 0, len(announces))
+		unknown := make(newBlockHashesData, 0, len(announces))
 		for _, block := range announces {
 			if !pm.blockchain.HasBlock(block.Hash) {
 				unknown = append(unknown, block)
@@ -644,9 +631,6 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 		var request newBlockData
 		if err := msg.Decode(&request); err != nil {
 			return errResp(ErrDecode, "%v: %v", msg, err)
-		}
-		if err := request.Block.ValidateFields(); err != nil {
-			return errResp(ErrDecode, "block validation %v: %v", msg, err)
 		}
 		request.Block.ReceivedAt = msg.ReceivedAt
 		request.Block.ReceivedFrom = p
@@ -669,7 +653,7 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 			// a singe block (as the true TD is below the propagated block), however this
 			// scenario should easily be covered by the fetcher.
 			currentBlock := pm.blockchain.CurrentBlock()
-			if trueTD.Cmp(pm.blockchain.GetTd(currentBlock.Hash())) > 0 {
+			if trueTD.Cmp(pm.blockchain.GetTd(currentBlock.Hash(), currentBlock.NumberU64())) > 0 {
 				go pm.synchronise(p)
 			}
 		}
@@ -709,8 +693,8 @@ func (pm *ProtocolManager) BroadcastBlock(block *types.Block, propagate bool) {
 	if propagate {
 		// Calculate the TD of the block (it's not imported yet, so block.Td is not valid)
 		var td *big.Int
-		if parent := pm.blockchain.GetBlock(block.ParentHash()); parent != nil {
-			td = new(big.Int).Add(block.Difficulty(), pm.blockchain.GetTd(block.ParentHash()))
+		if parent := pm.blockchain.GetBlock(block.ParentHash(), block.NumberU64()-1); parent != nil {
+			td = new(big.Int).Add(block.Difficulty(), pm.blockchain.GetTd(block.ParentHash(), block.NumberU64()-1))
 		} else {
 			glog.V(logger.Error).Infof("propagating dangling block #%d [%x]", block.NumberU64(), hash[:4])
 			return
@@ -766,7 +750,7 @@ func (self *ProtocolManager) txBroadcastLoop() {
 // EthNodeInfo represents a short summary of the Dubaicoin sub-protocol metadata known
 // about the host peer.
 type EthNodeInfo struct {
-	Network    int         `json:"network"`    // Dubaicoin network ID (0=Olympic, 1=Frontier, 2=Morden)
+	Network    int         `json:"network"`    // Ethereum network ID (1=Frontier, 2=Morden, Ropsten=3)
 	Difficulty *big.Int    `json:"difficulty"` // Total difficulty of the host's blockchain
 	Genesis    common.Hash `json:"genesis"`    // SHA3 hash of the host's genesis block
 	Head       common.Hash `json:"head"`       // SHA3 hash of the host's best owned block
@@ -774,10 +758,11 @@ type EthNodeInfo struct {
 
 // NodeInfo retrieves some protocol metadata about the running host node.
 func (self *ProtocolManager) NodeInfo() *EthNodeInfo {
+	currentBlock := self.blockchain.CurrentBlock()
 	return &EthNodeInfo{
 		Network:    self.networkId,
-		Difficulty: self.blockchain.GetTd(self.blockchain.CurrentBlock().Hash()),
+		Difficulty: self.blockchain.GetTd(currentBlock.Hash(), currentBlock.NumberU64()),
 		Genesis:    self.blockchain.Genesis().Hash(),
-		Head:       self.blockchain.CurrentBlock().Hash(),
+		Head:       currentBlock.Hash(),
 	}
 }

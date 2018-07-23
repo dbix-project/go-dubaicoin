@@ -20,15 +20,17 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/dbix-project/go-dubaicoin/common"
-	"github.com/dbix-project/go-dubaicoin/crypto"
+	"github.com/dubaicoin-dbix/go-dubaicoin/common"
+	"github.com/dubaicoin-dbix/go-dubaicoin/crypto"
 )
 
 // Event is an event potentially triggered by the EVM's LOG mechanism. The Event
-// holds type information (inputs) about the yielded output
+// holds type information (inputs) about the yielded output. Anonymous events
+// don't get the signature canonical representation as the first LOG topic.
 type Event struct {
-	Name   string
-	Inputs []Argument
+	Name      string
+	Anonymous bool
+	Inputs    []Argument
 }
 
 // Id returns the canonical representation of the event's signature used by the

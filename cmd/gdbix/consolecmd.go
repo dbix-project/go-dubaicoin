@@ -19,57 +19,66 @@ package main
 import (
 	"os"
 	"os/signal"
+	"strings"
 
-	"github.com/dbix-project/go-dubaicoin/cmd/utils"
-	"github.com/dbix-project/go-dubaicoin/console"
+	"github.com/dubaicoin-dbix/go-dubaicoin/cmd/utils"
+	"github.com/dubaicoin-dbix/go-dubaicoin/console"
+	"github.com/dubaicoin-dbix/go-dubaicoin/node"
+	"github.com/dubaicoin-dbix/go-dubaicoin/rpc"
 	"gopkg.in/urfave/cli.v1"
 )
 
 var (
 	consoleCommand = cli.Command{
-		Action: localConsole,
-		Name:   "console",
-		Usage:  `Gdbix Console: interactive JavaScript environment`,
+		Action:    localConsole,
+		Name:      "console",
+		Usage:     "Start an interactive JavaScript environment",
+		ArgsUsage: "", // TODO: Write this!
+		Category:  "CONSOLE COMMANDS",
 		Description: `
 The Gdbix console is an interactive shell for the JavaScript runtime environment
 which exposes a node admin interface as well as the Ðapp JavaScript API.
-See https://github.com/dbix-project/go-dubaicoin/wiki/Javascipt-Console
+See https://github.com/dubaicoin-dbix/go-dubaicoin/wiki/Javascipt-Console
 `,
 	}
 	attachCommand = cli.Command{
-		Action: remoteConsole,
-		Name:   "attach",
-		Usage:  `Gdbix Console: interactive JavaScript environment (connect to node)`,
+		Action:    remoteConsole,
+		Name:      "attach",
+		Usage:     "Start an interactive JavaScript environment (connect to node)",
+		ArgsUsage: "", // TODO: Write this!
+		Category:  "CONSOLE COMMANDS",
 		Description: `
 The Gdbix console is an interactive shell for the JavaScript runtime environment
 which exposes a node admin interface as well as the Ðapp JavaScript API.
-See https://github.com/dbix-project/go-dubaicoin/wiki/Javascipt-Console.
-This command allows to open a console on a running geth node.
-	`,
+See https://github.com/dubaicoin-dbix/go-dubaicoin/wiki/Javascipt-Console.
+This command allows to open a console on a running gdbix node.
+`,
 	}
 	javascriptCommand = cli.Command{
-		Action: ephemeralConsole,
-		Name:   "js",
-		Usage:  `executes the given JavaScript files in the Gdbix JavaScript VM`,
+		Action:    ephemeralConsole,
+		Name:      "js",
+		Usage:     "Execute the specified JavaScript files",
+		ArgsUsage: "", // TODO: Write this!
+		Category:  "CONSOLE COMMANDS",
 		Description: `
 The JavaScript VM exposes a node admin interface as well as the Ðapp
-JavaScript API. See https://github.com/dbix-project/go-dubaicoin/wiki/Javascipt-Console
+JavaScript API. See https://github.com/dubaicoin-dbix/go-dubaicoin/wiki/Javascipt-Console
 `,
 	}
 )
 
-// localConsole starts a new geth node, attaching a JavaScript console to it at the
+// localConsole starts a new gdbix node, attaching a JavaScript console to it at the
 // same time.
 func localConsole(ctx *cli.Context) error {
 	// Create and start the node based on the CLI flags
-	node := utils.MakeSystemNode(clientIdentifier, verString, relConfig, makeDefaultExtra(), ctx)
+	node := makeFullNode(ctx)
 	startNode(ctx, node)
 	defer node.Stop()
 
 	// Attach to the newly started node and start the JavaScript console
 	client, err := node.Attach()
 	if err != nil {
-		utils.Fatalf("Failed to attach to the inproc geth: %v", err)
+		utils.Fatalf("Failed to attach to the inproc gdbix: %v", err)
 	}
 	config := console.Config{
 		DataDir: node.DataDir(),
@@ -95,16 +104,16 @@ func localConsole(ctx *cli.Context) error {
 	return nil
 }
 
-// remoteConsole will connect to a remote geth instance, attaching a JavaScript
+// remoteConsole will connect to a remote gdbix instance, attaching a JavaScript
 // console to it.
 func remoteConsole(ctx *cli.Context) error {
-	// Attach to a remotely running geth instance and start the JavaScript console
-	client, err := utils.NewRemoteRPCClient(ctx)
+	// Attach to a remotely running gdbix instance and start the JavaScript console
+	client, err := dialRPC(ctx.Args().First())
 	if err != nil {
-		utils.Fatalf("Unable to attach to remote geth: %v", err)
+		utils.Fatalf("Unable to attach to remote gdbix: %v", err)
 	}
 	config := console.Config{
-		DataDir: utils.MustMakeDataDir(ctx),
+		DataDir: utils.MakeDataDir(ctx),
 		DocRoot: ctx.GlobalString(utils.JSpathFlag.Name),
 		Client:  client,
 		Preload: utils.MakeConsolePreloads(ctx),
@@ -127,19 +136,33 @@ func remoteConsole(ctx *cli.Context) error {
 	return nil
 }
 
-// ephemeralConsole starts a new geth node, attaches an ephemeral JavaScript
+// dialRPC returns a RPC client which connects to the given endpoint.
+// The check for empty endpoint implements the defaulting logic
+// for "gdbix attach" and "gdbix monitor" with no argument.
+func dialRPC(endpoint string) (*rpc.Client, error) {
+	if endpoint == "" {
+		endpoint = node.DefaultIPCEndpoint(clientIdentifier)
+	} else if strings.HasPrefix(endpoint, "rpc:") || strings.HasPrefix(endpoint, "ipc:") {
+		// Backwards compatibility with gdbix < 1.5 which required
+		// these prefixes.
+		endpoint = endpoint[4:]
+	}
+	return rpc.Dial(endpoint)
+}
+
+// ephemeralConsole starts a new gdbix node, attaches an ephemeral JavaScript
 // console to it, and each of the files specified as arguments and tears the
 // everything down.
 func ephemeralConsole(ctx *cli.Context) error {
 	// Create and start the node based on the CLI flags
-	node := utils.MakeSystemNode(clientIdentifier, verString, relConfig, makeDefaultExtra(), ctx)
+	node := makeFullNode(ctx)
 	startNode(ctx, node)
 	defer node.Stop()
 
 	// Attach to the newly started node and start the JavaScript console
 	client, err := node.Attach()
 	if err != nil {
-		utils.Fatalf("Failed to attach to the inproc geth: %v", err)
+		utils.Fatalf("Failed to attach to the inproc gdbix: %v", err)
 	}
 	config := console.Config{
 		DataDir: node.DataDir(),

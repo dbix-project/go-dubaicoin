@@ -19,12 +19,9 @@ package core
 import (
 	"math/big"
 
-	"github.com/dbix-project/go-dubaicoin/accounts"
-	"github.com/dbix-project/go-dubaicoin/core/state"
-	"github.com/dbix-project/go-dubaicoin/core/types"
-	"github.com/dbix-project/go-dubaicoin/core/vm"
-	"github.com/dbix-project/go-dubaicoin/ethdb"
-	"github.com/dbix-project/go-dubaicoin/event"
+	"github.com/dubaicoin-dbix/go-dubaicoin/core/state"
+	"github.com/dubaicoin-dbix/go-dubaicoin/core/types"
+	"github.com/dubaicoin-dbix/go-dubaicoin/core/vm"
 )
 
 // Validator is an interface which defines the standard for block validation.
@@ -61,18 +58,5 @@ type HeaderValidator interface {
 // of gas used in the process and return an error if any of the internal rules
 // failed.
 type Processor interface {
-	Process(block *types.Block, statedb *state.StateDB, cfg vm.Config) (types.Receipts, vm.Logs, *big.Int, error)
-}
-
-// Backend is an interface defining the basic functionality for an operable node
-// with all the functionality to be a functional, valid Dubaicoin operator.
-//
-// TODO Remove this
-type Backend interface {
-	AccountManager() *accounts.Manager
-	BlockChain() *BlockChain
-	TxPool() *TxPool
-	ChainDb() ethdb.Database
-	DappDb() ethdb.Database
-	EventMux() *event.TypeMux
+	Process(block *types.Block, statedb *state.StateDB, cfg vm.Config) (types.Receipts, []*types.Log, *big.Int, error)
 }

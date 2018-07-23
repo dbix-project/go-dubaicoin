@@ -1,26 +1,24 @@
 # common
 
 [![Build
-Status](https://travis-ci.org/dubaicoin/go-dubaicoin.png?branch=master)](https://travis-ci.org/dubaicoin/go-dubaicoin)
+Status](https://travis-ci.org/ethereum/go-ethereum.png?branch=master)](https://travis-ci.org/ethereum/go-ethereum)
 
 The common package contains the dubaicoin utility library.
 
 # Installation
 
-As a subdirectory the main go-dubaicoin repository, you get it with
-`go get github.com/dbix-project/go-dubaicoin`.
+As a subdirectory the main go-ethereum repository, you get it with
+`go get github.com/dubaicoin-dbix/go-dubaicoin`.
 
 # Usage
 
 ## RLP (Recursive Linear Prefix) Encoding
 
+RLP Encoding is an encoding scheme used by the Dubaicoin project. It
+encodes any native value or list to a string.
 
-RLP Encoding is an encoding scheme utilized by the Dubaicoin project. It
-encodes any native value or list to string.
-
-More in depth information about the Encoding scheme see the [Wiki](http://wiki.dubaicoin.org/index.php/RLP)
-article.
-
+More in depth information about the encoding scheme see the
+[Wiki](http://wiki.ethereum.org/index.php/RLP) article.
 
 ```go
 rlp := common.Encode("doge")
@@ -34,11 +32,10 @@ fmt.Println(decoded) // => ["dog" "cat"]
 
 ## Patricia Trie
 
-Patricie Tree is a merkle tree utilized by the Dubaicoin project.
-
+Patricie Tree is a merkle trie used by the Dubaicoin project.
 
 More in depth information about the (modified) Patricia Trie can be
-found on the [Wiki](http://wiki.dubaicoin.org/index.php/Patricia_Tree).
+found on the [Wiki](http://wiki.ethereum.org/index.php/Patricia_Tree).
 
 The patricia trie uses a db as backend and could be anything as long as
 it satisfies the Database interface found in `common/db.go`.

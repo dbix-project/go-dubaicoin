@@ -23,8 +23,8 @@ import (
 	"os"
 	"runtime/trace"
 
-	"github.com/dbix-project/go-dubaicoin/logger"
-	"github.com/dbix-project/go-dubaicoin/logger/glog"
+	"github.com/dubaicoin-dbix/go-dubaicoin/logger"
+	"github.com/dubaicoin-dbix/go-dubaicoin/logger/glog"
 )
 
 // StartGoTrace turns on tracing, writing to the given file.

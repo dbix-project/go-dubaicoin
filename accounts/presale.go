@@ -22,9 +22,10 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 
-	"github.com/dbix-project/go-dubaicoin/crypto"
+	"github.com/dubaicoin-dbix/go-dubaicoin/crypto"
 	"github.com/pborman/uuid"
 	"golang.org/x/crypto/pbkdf2"
 )
@@ -53,6 +54,9 @@ func decryptPreSaleKey(fileContent []byte, password string) (key *Key, err error
 		return nil, err
 	}
 	encSeedBytes, err := hex.DecodeString(preSaleKeyStruct.EncSeed)
+	if err != nil {
+		return nil, errors.New("invalid hex in encSeed")
+	}
 	iv := encSeedBytes[:16]
 	cipherText := encSeedBytes[16:]
 	/*

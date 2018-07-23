@@ -1,20 +1,20 @@
-// Copyright 2015 The go-dubaicoin Authors
-// This file is part of the go-dubaicoin library.
+// Copyright 2015 The go-ethereum Authors
+// This file is part of the go-ethereum library.
 //
-// The go-dubaicoin library is free software: you can redistribute it and/or modify
+// The go-ethereum library is free software: you can redistribute it and/or modify
 // it under the terms of the GNU Lesser General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
 //
-// The go-dubaicoin library is distributed in the hope that it will be useful,
+// The go-ethereum library is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
 // GNU Lesser General Public License for more details.
 //
 // You should have received a copy of the GNU Lesser General Public License
-// along with the go-dubaicoin library. If not, see <http://www.gnu.org/licenses/>.
+// along with the go-ethereum library. If not, see <http://www.gnu.org/licenses/>.
 
-package dbix
+package eth
 
 import (
 	"errors"
@@ -23,12 +23,12 @@ import (
 	"sync"
 	"time"
 
-	"github.com/dbix-project/go-dubaicoin/common"
-	"github.com/dbix-project/go-dubaicoin/core/types"
-	"github.com/dbix-project/go-dubaicoin/logger"
-	"github.com/dbix-project/go-dubaicoin/logger/glog"
-	"github.com/dbix-project/go-dubaicoin/p2p"
-	"github.com/dbix-project/go-dubaicoin/rlp"
+	"github.com/dubaicoin-dbix/go-dubaicoin/common"
+	"github.com/dubaicoin-dbix/go-dubaicoin/core/types"
+	"github.com/dubaicoin-dbix/go-dubaicoin/logger"
+	"github.com/dubaicoin-dbix/go-dubaicoin/logger/glog"
+	"github.com/dubaicoin-dbix/go-dubaicoin/p2p"
+	"github.com/dubaicoin-dbix/go-dubaicoin/rlp"
 	"gopkg.in/fatih/set.v0"
 )
 
@@ -230,7 +230,7 @@ func (p *peer) RequestReceipts(hashes []common.Hash) error {
 	return p2p.Send(p.rw, GetReceiptsMsg, hashes)
 }
 
-// Handshake executes the eth protocol handshake, negotiating version number,
+// Handshake executes the dbix protocol handshake, negotiating version number,
 // network IDs, difficulties, head and genesis blocks.
 func (p *peer) Handshake(network int, td *big.Int, head common.Hash, genesis common.Hash) error {
 	// Send out own handshake in a new thread
@@ -295,7 +295,7 @@ func (p *peer) readStatus(network int, status *statusData, genesis common.Hash) 
 // String implements fmt.Stringer.
 func (p *peer) String() string {
 	return fmt.Sprintf("Peer %s [%s]", p.id,
-		fmt.Sprintf("dbix/%2d", p.version),
+		fmt.Sprintf("eth/%2d", p.version),
 	)
 }
 

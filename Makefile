@@ -2,12 +2,11 @@
 # with Go source code. If you know what GOPATH is then you probably
 # don't need to bother with make.
 
-.PHONY: gdbix gdbix-cross evm all test clean
+.PHONY: gdbix android ios gdbix-cross evm all test clean
 .PHONY: gdbix-linux gdbix-linux-386 gdbix-linux-amd64 gdbix-linux-mips64 gdbix-linux-mips64le
 .PHONY: gdbix-linux-arm gdbix-linux-arm-5 gdbix-linux-arm-6 gdbix-linux-arm-7 gdbix-linux-arm64
 .PHONY: gdbix-darwin gdbix-darwin-386 gdbix-darwin-amd64
 .PHONY: gdbix-windows gdbix-windows-386 gdbix-windows-amd64
-.PHONY: gdbix-android gdbix-ios
 
 GOBIN = build/bin
 GO ?= latest
@@ -20,16 +19,26 @@ gdbix:
 evm:
 	build/env.sh go run build/ci.go install ./cmd/evm
 	@echo "Done building."
-	@echo "Run \"$(GOBIN)/evm to start the evm."
+	@echo "Run \"$(GOBIN)/evm\" to start the evm."
 
 all:
 	build/env.sh go run build/ci.go install
+
+android:
+	build/env.sh go run build/ci.go aar --local
+	@echo "Done building."
+	@echo "Import \"$(GOBIN)/gdbix.aar\" to use the library."
+
+ios:
+	build/env.sh go run build/ci.go xcode --local
+	@echo "Done building."
+	@echo "Import \"$(GOBIN)/Gdbix.framework\" to use the library."
 
 test: all
 	build/env.sh go run build/ci.go test
 
 clean:
-	rm -fr build/_workspace/pkg/ Godeps/_workspace/pkg $(GOBIN)/*
+	rm -fr build/_workspace/pkg/ $(GOBIN)/*
 
 # Cross Compilation Targets (xgo)
 
@@ -112,13 +121,3 @@ gdbix-windows-amd64:
 	build/env.sh go run build/ci.go xgo -- --go=$(GO) --dest=$(GOBIN) --targets=windows/amd64 -v ./cmd/gdbix
 	@echo "Windows amd64 cross compilation done:"
 	@ls -ld $(GOBIN)/gdbix-windows-* | grep amd64
-
-gdbix-android:
-	build/env.sh go run build/ci.go xgo -- --go=$(GO) --dest=$(GOBIN) --targets=android-21/aar -v ./cmd/gdbix
-	@echo "Android cross compilation done:"
-	@ls -ld $(GOBIN)/gdbix-android-*
-
-gdbix-ios:
-	build/env.sh go run build/ci.go xgo -- --go=$(GO) --dest=$(GOBIN) --targets=ios-7.0/framework -v ./cmd/gdbix
-	@echo "iOS framework cross compilation done:"
-	@ls -ld $(GOBIN)/gdbix-ios-*

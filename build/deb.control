@@ -5,14 +5,14 @@ Maintainer: {{.Author}}
 Build-Depends: debhelper (>= 8.0.0), golang-1.7
 Standards-Version: 3.9.5
 Homepage: https://ethereum.org
-Vcs-Git: git://github.com/dbix-project/go-dubaicoin.git
-Vcs-Browser: https://github.com/dbix-project/go-dubaicoin
+Vcs-Git: git://github.com/dubaicoin-dbix/go-dubaicoin.git
+Vcs-Browser: https://github.com/dubaicoin-dbix/go-dubaicoin
 
 Package: {{.Name}}
 Architecture: any
 Depends: ${misc:Depends}, {{.ExeList}}
-Description: Meta-package to install geth and other tools
- Meta-package to install geth and other tools
+Description: Meta-package to install gdbix and other tools
+ Meta-package to install gdbix and other tools
  
 {{range .Executables}}
 Package: {{$.ExeName .}}

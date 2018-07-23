@@ -19,7 +19,7 @@
 package fetcher
 
 import (
-	"github.com/dbix-project/go-dubaicoin/metrics"
+	"github.com/dubaicoin-dbix/go-dubaicoin/metrics"
 )
 
 var (

@@ -122,7 +122,7 @@ var severityName = []string{
 // these path prefixes are trimmed for display, but not when
 // matching vmodule filters.
 var trimPrefixes = []string{
-	"/github.com/dbix-project/go-dubaicoin",
+	"/github.com/dubaicoin-dbix/go-dubaicoin",
 	"/github.com/ethereum/ethash",
 }
 
@@ -928,7 +928,7 @@ const flushInterval = 30 * time.Second
 
 // flushDaemon periodically flushes the log file buffers.
 func (l *loggingT) flushDaemon() {
-	for _ = range time.NewTicker(flushInterval).C {
+	for range time.NewTicker(flushInterval).C {
 		l.lockAndFlushAll()
 	}
 }

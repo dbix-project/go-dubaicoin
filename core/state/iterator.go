@@ -21,9 +21,9 @@ import (
 	"fmt"
 	"math/big"
 
-	"github.com/dbix-project/go-dubaicoin/common"
-	"github.com/dbix-project/go-dubaicoin/rlp"
-	"github.com/dbix-project/go-dubaicoin/trie"
+	"github.com/dubaicoin-dbix/go-dubaicoin/common"
+	"github.com/dubaicoin-dbix/go-dubaicoin/rlp"
+	"github.com/dubaicoin-dbix/go-dubaicoin/trie"
 )
 
 // NodeIterator is an iterator to traverse the entire state trie post-order,
@@ -123,7 +123,7 @@ func (it *NodeIterator) step() error {
 	if !it.dataIt.Next() {
 		it.dataIt = nil
 	}
-	if bytes.Compare(account.CodeHash, emptyCodeHash) != 0 {
+	if !bytes.Equal(account.CodeHash, emptyCodeHash) {
 		it.codeHash = common.BytesToHash(account.CodeHash)
 		it.code, err = it.state.db.Get(account.CodeHash)
 		if err != nil {

@@ -14,27 +14,23 @@
 // You should have received a copy of the GNU General Public License
 // along with go-ethereum. If not, see <http://www.gnu.org/licenses/>.
 
-// gdbixrpctest is a command to run the external RPC tests.
+// gethrpctest is a command to run the external RPC tests.
 package main
 
 import (
 	"flag"
-	"io/ioutil"
 	"log"
 	"os"
 	"os/signal"
 
-	"github.com/dbix-project/go-dubaicoin/accounts"
-	"github.com/dbix-project/go-dubaicoin/common"
-	"github.com/dbix-project/go-dubaicoin/core"
-	"github.com/dbix-project/go-dubaicoin/crypto"
-	"github.com/dbix-project/go-dubaicoin/dbix"
-	"github.com/dbix-project/go-dubaicoin/ethdb"
-	"github.com/dbix-project/go-dubaicoin/logger/glog"
-	"github.com/dbix-project/go-dubaicoin/node"
-	"github.com/dbix-project/go-dubaicoin/params"
-	"github.com/dbix-project/go-dubaicoin/tests"
-	"github.com/dbix-project/go-dubaicoin/whisper"
+	"github.com/dubaicoin-dbix/go-dubaicoin/crypto"
+	"github.com/dubaicoin-dbix/go-dubaicoin/dbix"
+	"github.com/dubaicoin-dbix/go-dubaicoin/dbixdb"
+	"github.com/dubaicoin-dbix/go-dubaicoin/logger/glog"
+	"github.com/dubaicoin-dbix/go-dubaicoin/node"
+	"github.com/dubaicoin-dbix/go-dubaicoin/params"
+	"github.com/dubaicoin-dbix/go-dubaicoin/tests"
+	whisper "github.com/dubaicoin-dbix/go-dubaicoin/whisper/whisperv2"
 )
 
 const defaultTestKey = "b71c71a67e1177ad4e901695e1b4b9ee17ae16c6668d313eac2f96dbcda3f291"
@@ -61,14 +57,8 @@ func main() {
 	if !found {
 		log.Fatalf("Requested test (%s) not found within suite", *testName)
 	}
-	// Create the protocol stack to run the test with
-	keydir, err := ioutil.TempDir("", "")
-	if err != nil {
-		log.Fatalf("Failed to create temporary keystore directory: %v", err)
-	}
-	defer os.RemoveAll(keydir)
 
-	stack, err := MakeSystemNode(keydir, *testKey, test)
+	stack, err := MakeSystemNode(*testKey, test)
 	if err != nil {
 		log.Fatalf("Failed to assemble test stack: %v", err)
 	}
@@ -92,23 +82,24 @@ func main() {
 
 // MakeSystemNode configures a protocol stack for the RPC tests based on a given
 // keystore path and initial pre-state.
-func MakeSystemNode(keydir string, privkey string, test *tests.BlockTest) (*node.Node, error) {
+func MakeSystemNode(privkey string, test *tests.BlockTest) (*node.Node, error) {
 	// Create a networkless protocol stack
 	stack, err := node.New(&node.Config{
-		IPCPath:     node.DefaultIPCEndpoint(),
-		HTTPHost:    common.DefaultHTTPHost,
-		HTTPPort:    common.DefaultHTTPPort,
-		HTTPModules: []string{"admin", "db", "dbix", "debug", "miner", "net", "shh", "txpool", "personal", "web3"},
-		WSHost:      common.DefaultWSHost,
-		WSPort:      common.DefaultWSPort,
-		WSModules:   []string{"admin", "db", "dbix", "debug", "miner", "net", "shh", "txpool", "personal", "web3"},
-		NoDiscovery: true,
+		UseLightweightKDF: true,
+		IPCPath:           node.DefaultIPCEndpoint(""),
+		HTTPHost:          node.DefaultHTTPHost,
+		HTTPPort:          node.DefaultHTTPPort,
+		HTTPModules:       []string{"admin", "db", "dbix", "eth", "debug", "miner", "net", "shh", "txpool", "personal", "web3"},
+		WSHost:            node.DefaultWSHost,
+		WSPort:            node.DefaultWSPort,
+		WSModules:         []string{"admin", "db", "dbix", "eth", "debug", "miner", "net", "shh", "txpool", "personal", "web3"},
+		NoDiscovery:       true,
 	})
 	if err != nil {
 		return nil, err
 	}
 	// Create the keystore and inject an unlocked account if requested
-	accman := accounts.NewPlaintextManager(keydir)
+	accman := stack.AccountManager()
 	if len(privkey) > 0 {
 		key, err := crypto.HexToECDSA(privkey)
 		if err != nil {
@@ -127,13 +118,12 @@ func MakeSystemNode(keydir string, privkey string, test *tests.BlockTest) (*node
 	if _, err := test.InsertPreState(db); err != nil {
 		return nil, err
 	}
-	dbixConf := &dbix.Config{
+	ethConf := &eth.Config{
 		TestGenesisState: db,
 		TestGenesisBlock: test.Genesis,
-		ChainConfig:      &core.ChainConfig{HomesteadBlock: params.MainNetHomesteadBlock},
-		AccountManager:   accman,
+		ChainConfig:      &params.ChainConfig{HomesteadBlock: params.MainNetHomesteadBlock},
 	}
-	if err := stack.Register(func(ctx *node.ServiceContext) (node.Service, error) { return dbix.New(ctx, dbixConf) }); err != nil {
+	if err := stack.Register(func(ctx *node.ServiceContext) (node.Service, error) { return eth.New(ctx, ethConf) }); err != nil {
 		return nil, err
 	}
 	// Initialize and register the Whisper protocol
@@ -146,9 +136,9 @@ func MakeSystemNode(keydir string, privkey string, test *tests.BlockTest) (*node
 // RunTest executes the specified test against an already pre-configured protocol
 // stack to ensure basic checks pass before running RPC tests.
 func RunTest(stack *node.Node, test *tests.BlockTest) error {
-	var dubaicoin *dbix.Dubaicoin
-	stack.Service(&dubaicoin)
-	blockchain := dubaicoin.BlockChain()
+	var ethereum *eth.Ethereum
+	stack.Service(&ethereum)
+	blockchain := ethereum.BlockChain()
 
 	// Process the blocks and verify the imported headers
 	blocks, err := test.TryBlocksInsert(blockchain)

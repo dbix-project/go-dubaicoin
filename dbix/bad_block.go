@@ -1,4 +1,4 @@
-// Copyright 2015 The go-ethereum Authors
+// Copyright 2016 The go-ethereum Authors
 // This file is part of the go-ethereum library.
 //
 // The go-ethereum library is free software: you can redistribute it and/or modify
@@ -14,7 +14,7 @@
 // You should have received a copy of the GNU Lesser General Public License
 // along with the go-ethereum library. If not, see <http://www.gnu.org/licenses/>.
 
-package dbix
+package eth
 
 import (
 	"bytes"
@@ -23,17 +23,17 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/dbix-project/go-dubaicoin/common"
-	"github.com/dbix-project/go-dubaicoin/core/types"
-	"github.com/dbix-project/go-dubaicoin/logger"
-	"github.com/dbix-project/go-dubaicoin/logger/glog"
-	"github.com/dbix-project/go-dubaicoin/rlp"
+	"github.com/dubaicoin-dbix/go-dubaicoin/common"
+	"github.com/dubaicoin-dbix/go-dubaicoin/core/types"
+	"github.com/dubaicoin-dbix/go-dubaicoin/logger"
+	"github.com/dubaicoin-dbix/go-dubaicoin/logger/glog"
+	"github.com/dubaicoin-dbix/go-dubaicoin/rlp"
 )
 
 const (
-	// The Dubaicoin main network genesis block hash.
+	// The Dubaicoin main network genesis block.
 	defaultGenesisHash = "0x4f09f80efaa0ac22046320f6afa92b96371343f7d6da68d2d7d1b44dcc0bc629"
-	badBlocksURL       = "https://badblocks.dbixchain.io"
+	badBlocksURL       = "https://badblocks.dbixscan.io"
 )
 
 var EnableBadBlockReporting = false

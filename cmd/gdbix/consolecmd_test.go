@@ -28,7 +28,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/dbix-project/go-dubaicoin/rpc"
+	"github.com/dubaicoin-dbix/go-dubaicoin/params"
+	"github.com/dubaicoin-dbix/go-dubaicoin/rpc"
 )
 
 // Tests that a node embedded within a console can be started up properly and
@@ -37,7 +38,7 @@ func TestConsoleWelcome(t *testing.T) {
 	coinbase := "0x8605cdbbdb6d264aa742e77020dcbc58fcdce182"
 
 	// Start a gdbix console, make sure it's cleaned up and terminate the console
-	gdbix := runGdbix(t,
+	gdbix := runGeth(t,
 		"--port", "0", "--maxpeers", "0", "--nodiscover", "--nat", "none",
 		"--etherbase", coinbase, "--shh",
 		"console")
@@ -45,7 +46,7 @@ func TestConsoleWelcome(t *testing.T) {
 	// Gather all the infos the welcome message needs to contain
 	gdbix.setTemplateFunc("goos", func() string { return runtime.GOOS })
 	gdbix.setTemplateFunc("gover", runtime.Version)
-	gdbix.setTemplateFunc("gdbixver", func() string { return verString })
+	gdbix.setTemplateFunc("gethver", func() string { return params.Version })
 	gdbix.setTemplateFunc("niltime", func() string { return time.Unix(0, 0).Format(time.RFC1123) })
 	gdbix.setTemplateFunc("apis", func() []string {
 		apis := append(strings.Split(rpc.DefaultIPCApis, ","), rpc.MetadataApi)
@@ -57,7 +58,7 @@ func TestConsoleWelcome(t *testing.T) {
 	gdbix.expect(`
 Welcome to the Gdbix JavaScript console!
 
-instance: Gdbix/v{{gdbixver}}/{{goos}}/{{gover}}
+instance: Gdbix/v{{gethver}}/{{goos}}/{{gover}}
 coinbase: {{.Etherbase}}
 at block: 0 ({{niltime}})
  datadir: {{.Datadir}}
@@ -82,7 +83,7 @@ func TestIPCAttachWelcome(t *testing.T) {
 	}
 	// Note: we need --shh because testAttachWelcome checks for default
 	// list of ipc modules and shh is included there.
-	gdbix := runGdbix(t,
+	gdbix := runGeth(t,
 		"--port", "0", "--maxpeers", "0", "--nodiscover", "--nat", "none",
 		"--etherbase", coinbase, "--shh", "--ipcpath", ipc)
 
@@ -95,9 +96,8 @@ func TestIPCAttachWelcome(t *testing.T) {
 
 func TestHTTPAttachWelcome(t *testing.T) {
 	coinbase := "0x8605cdbbdb6d264aa742e77020dcbc58fcdce182"
-
 	port := strconv.Itoa(trulyRandInt(1024, 65536)) // Yeah, sometimes this will fail, sorry :P
-	gdbix := runGdbix(t,
+	gdbix := runGeth(t,
 		"--port", "0", "--maxpeers", "0", "--nodiscover", "--nat", "none",
 		"--etherbase", coinbase, "--rpc", "--rpcport", port)
 
@@ -112,7 +112,7 @@ func TestWSAttachWelcome(t *testing.T) {
 	coinbase := "0x8605cdbbdb6d264aa742e77020dcbc58fcdce182"
 	port := strconv.Itoa(trulyRandInt(1024, 65536)) // Yeah, sometimes this will fail, sorry :P
 
-	gdbix := runGdbix(t,
+	gdbix := runGeth(t,
 		"--port", "0", "--maxpeers", "0", "--nodiscover", "--nat", "none",
 		"--etherbase", coinbase, "--ws", "--wsport", port)
 
@@ -123,16 +123,16 @@ func TestWSAttachWelcome(t *testing.T) {
 	gdbix.expectExit()
 }
 
-func testAttachWelcome(t *testing.T, gdbix *testgdbix, endpoint string) {
+func testAttachWelcome(t *testing.T, gdbix *testgeth, endpoint string) {
 	// Attach to a running gdbix note and terminate immediately
-	attach := runGdbix(t, "attach", endpoint)
+	attach := runGeth(t, "attach", endpoint)
 	defer attach.expectExit()
 	attach.stdin.Close()
 
 	// Gather all the infos the welcome message needs to contain
 	attach.setTemplateFunc("goos", func() string { return runtime.GOOS })
 	attach.setTemplateFunc("gover", runtime.Version)
-	attach.setTemplateFunc("gdbixver", func() string { return verString })
+	attach.setTemplateFunc("gethver", func() string { return params.Version })
 	attach.setTemplateFunc("etherbase", func() string { return gdbix.Etherbase })
 	attach.setTemplateFunc("niltime", func() string { return time.Unix(0, 0).Format(time.RFC1123) })
 	attach.setTemplateFunc("ipc", func() bool { return strings.HasPrefix(endpoint, "ipc") })
@@ -152,7 +152,7 @@ func testAttachWelcome(t *testing.T, gdbix *testgdbix, endpoint string) {
 	attach.expect(`
 Welcome to the Gdbix JavaScript console!
 
-instance: Gdbix/v{{gdbixver}}/{{goos}}/{{gover}}
+instance: Gdbix/v{{gethver}}/{{goos}}/{{gover}}
 coinbase: {{etherbase}}
 at block: 0 ({{niltime}}){{if ipc}}
  datadir: {{datadir}}{{end}}

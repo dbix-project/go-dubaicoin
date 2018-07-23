@@ -1,18 +1,18 @@
-// Copyright 2016 The go-elementrem Authors.
-// This file is part of the go-elementrem library.
+// Copyright 2015 The go-ethereum Authors
+// This file is part of the go-ethereum library.
 //
-// The go-elementrem library is free software: you can redistribute it and/or modify
+// The go-ethereum library is free software: you can redistribute it and/or modify
 // it under the terms of the GNU Lesser General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
 //
-// The go-elementrem library is distributed in the hope that it will be useful,
+// The go-ethereum library is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
 // GNU Lesser General Public License for more details.
 //
 // You should have received a copy of the GNU Lesser General Public License
-// along with the go-elementrem library. If not, see <http://www.gnu.org/licenses/>.
+// along with the go-ethereum library. If not, see <http://www.gnu.org/licenses/>.
 
 package core
 
@@ -21,34 +21,82 @@ import (
 	"math/big"
 	"time"
 
-	"github.com/dbix-project/go-dubaicoin/common"
-	"github.com/dbix-project/go-dubaicoin/core/state"
-	"github.com/dbix-project/go-dubaicoin/core/types"
-	"github.com/dbix-project/go-dubaicoin/logger/glog"
-	"github.com/dbix-project/go-dubaicoin/params"
-	"github.com/dbix-project/go-dubaicoin/pow"
+	"github.com/dubaicoin-dbix/go-dubaicoin/common"
+	"github.com/dubaicoin-dbix/go-dubaicoin/core/state"
+	"github.com/dubaicoin-dbix/go-dubaicoin/core/types"
+	"github.com/dubaicoin-dbix/go-dubaicoin/logger/glog"
+	"github.com/dubaicoin-dbix/go-dubaicoin/params"
+	"github.com/dubaicoin-dbix/go-dubaicoin/pow"
 	"gopkg.in/fatih/set.v0"
 )
 
 var (
 	ExpDiffPeriod = big.NewInt(100000)
-	big10         = big.NewInt(10)
 	big90         = big.NewInt(90)
+	big10         = big.NewInt(10)
 	bigMinus99    = big.NewInt(-99)
+	
+	nPowAveragingWindow = big.NewInt(21)
+	nPowMaxAdjustDown   = big.NewInt(16) // 16% adjustment down
+	nPowMaxAdjustUp     = big.NewInt(8)  // 8% adjustment up
+	nPowAveragingWindow90 = big.NewInt(90)
+
+	// Flux For Dbix
+	FluxDbixDiffBlock     = big.NewInt(63900) //The Block to Change the Diff to Flux
+	nPowMaxAdjustDownFlux = big.NewInt(5) // 0.5% adjustment down
+	nPowMaxAdjustUpFlux   = big.NewInt(3) // 0.3% adjustment up
+	nPowDampFlux          = big.NewInt(1) // 0.1%
 )
+
+func AveragingWindowTimespan90() *big.Int {
+	x := new(big.Int)
+	return x.Mul(nPowAveragingWindow90, big90)
+}
+
+func MinActualTimespanFlux(dampen bool) *big.Int {
+	x := new(big.Int)
+	y := new(big.Int)
+	z := new(big.Int)
+	if dampen {
+		x.Sub(big.NewInt(1000), nPowDampFlux)
+		y.Mul(AveragingWindowTimespan90(), x)
+		z.Div(y, big.NewInt(1000))
+	} else {
+		x.Sub(big.NewInt(1000), nPowMaxAdjustUpFlux)
+		y.Mul(AveragingWindowTimespan90(), x)
+		z.Div(y, big.NewInt(1000))
+	}
+	return z
+}
+
+func MaxActualTimespanFlux(dampen bool) *big.Int {
+	x := new(big.Int)
+	y := new(big.Int)
+	z := new(big.Int)
+	if dampen {
+		x.Add(big.NewInt(1000), nPowDampFlux)
+		y.Mul(AveragingWindowTimespan90(), x)
+		z.Div(y, big.NewInt(1000))
+	} else {
+		x.Add(big.NewInt(1000), nPowMaxAdjustDownFlux)
+		y.Mul(AveragingWindowTimespan90(), x)
+		z.Div(y, big.NewInt(1000))
+	}
+	return z
+}
 
 // BlockValidator is responsible for validating block headers, uncles and
 // processed state.
 //
 // BlockValidator implements Validator.
 type BlockValidator struct {
-	config *ChainConfig // Chain configuration options
-	bc     *BlockChain  // Canonical block chain
-	Pow    pow.PoW      // Proof of work used for validating
+	config *params.ChainConfig // Chain configuration options
+	bc     *BlockChain         // Canonical block chain
+	Pow    pow.PoW             // Proof of work used for validating
 }
 
 // NewBlockValidator returns a new block validator which is safe for re-use
-func NewBlockValidator(config *ChainConfig, blockchain *BlockChain, pow pow.PoW) *BlockValidator {
+func NewBlockValidator(config *params.ChainConfig, blockchain *BlockChain, pow pow.PoW) *BlockValidator {
 	validator := &BlockValidator{
 		config: config,
 		Pow:    pow,
@@ -65,7 +113,7 @@ func NewBlockValidator(config *ChainConfig, blockchain *BlockChain, pow pow.PoW)
 //
 // ValidateBlock also validates and makes sure that any previous state (or present)
 // state that might or might not be present is checked to make sure that fast
-// sync has done it's job proper. This prevents the block validator form accepting
+// sync has done it's job proper. This prevents the block validator from accepting
 // false positives where a header is present but the state is not.
 func (v *BlockValidator) ValidateBlock(block *types.Block) error {
 	if v.bc.HasBlock(block.Hash()) {
@@ -73,7 +121,7 @@ func (v *BlockValidator) ValidateBlock(block *types.Block) error {
 			return &KnownBlockError{block.Number(), block.Hash()}
 		}
 	}
-	parent := v.bc.GetBlock(block.ParentHash())
+	parent := v.bc.GetBlock(block.ParentHash(), block.NumberU64()-1)
 	if parent == nil {
 		return ParentError(block.ParentHash())
 	}
@@ -83,7 +131,7 @@ func (v *BlockValidator) ValidateBlock(block *types.Block) error {
 
 	header := block.Header()
 	// validate the block header
-	if err := ValidateHeader(v.config, v.Pow, header, parent.Header(), false, false); err != nil {
+	if err := ValidateHeader(v.config, v.Pow, header, parent.Header(), false, false, v.bc); err != nil {
 		return err
 	}
 	// verify the uncles are correctly rewarded
@@ -94,14 +142,14 @@ func (v *BlockValidator) ValidateBlock(block *types.Block) error {
 	// Verify UncleHash before running other uncle validations
 	unclesSha := types.CalcUncleHash(block.Uncles())
 	if unclesSha != header.UncleHash {
-		return fmt.Errorf("invalid uncles root hash. received=%x calculated=%x", header.UncleHash, unclesSha)
+		return fmt.Errorf("invalid uncles root hash (remote: %x local: %x)", header.UncleHash, unclesSha)
 	}
 
 	// The transactions Trie's root (R = (Tr [[i, RLP(T1)], [i, RLP(T2)], ... [n, RLP(Tn)]]))
 	// can be used by light clients to make sure they've received the correct Txs
 	txSha := types.DeriveSha(block.Transactions())
 	if txSha != header.TxHash {
-		return fmt.Errorf("invalid transaction root hash. received=%x calculated=%x", header.TxHash, txSha)
+		return fmt.Errorf("invalid transaction root hash (remote: %x local: %x)", header.TxHash, txSha)
 	}
 
 	return nil
@@ -114,33 +162,33 @@ func (v *BlockValidator) ValidateBlock(block *types.Block) error {
 func (v *BlockValidator) ValidateState(block, parent *types.Block, statedb *state.StateDB, receipts types.Receipts, usedGas *big.Int) (err error) {
 	header := block.Header()
 	if block.GasUsed().Cmp(usedGas) != 0 {
-		return ValidationError(fmt.Sprintf("gas used error (%v / %v)", block.GasUsed(), usedGas))
+		return ValidationError(fmt.Sprintf("invalid gas used (remote: %v local: %v)", block.GasUsed(), usedGas))
 	}
 	// Validate the received block's bloom with the one derived from the generated receipts.
 	// For valid blocks this should always validate to true.
 	rbloom := types.CreateBloom(receipts)
 	if rbloom != header.Bloom {
-		return fmt.Errorf("unable to replicate block's bloom=%x vs calculated bloom=%x", header.Bloom, rbloom)
+		return fmt.Errorf("invalid bloom (remote: %x  local: %x)", header.Bloom, rbloom)
 	}
 	// Tre receipt Trie's root (R = (Tr [[H1, R1], ... [Hn, R1]]))
 	receiptSha := types.DeriveSha(receipts)
 	if receiptSha != header.ReceiptHash {
-		return fmt.Errorf("invalid receipt root hash. received=%x calculated=%x", header.ReceiptHash, receiptSha)
+		return fmt.Errorf("invalid receipt root hash (remote: %x local: %x)", header.ReceiptHash, receiptSha)
 	}
 	// Validate the state root against the received state root and throw
 	// an error if they don't match.
-	if root := statedb.IntermediateRoot(); header.Root != root {
-		return fmt.Errorf("invalid merkle root: header=%x computed=%x", header.Root, root)
+	if root := statedb.IntermediateRoot(v.config.IsEIP158(header.Number)); header.Root != root {
+		return fmt.Errorf("invalid merkle root (remote: %x local: %x)", header.Root, root)
 	}
 	return nil
 }
 
-// VerifyUncles verifies the given block's uncles and applies the Elementrem
+// VerifyUncles verifies the given block's uncles and applies the Dubaicoin
 // consensus rules to the various block headers included; it will return an
 // error if any of the included uncle headers were invalid. It returns an error
 // if the validation failed.
 func (v *BlockValidator) VerifyUncles(block, parent *types.Block) error {
-	// validate that there at most 2 uncles included in this block
+	// validate that there are at most 2 uncles included in this block
 	if len(block.Uncles()) > 2 {
 		return ValidationError("Block can only contain maximum 2 uncles (contained %v)", len(block.Uncles()))
 	}
@@ -178,7 +226,7 @@ func (v *BlockValidator) VerifyUncles(block, parent *types.Block) error {
 			return UncleError("uncle[%d](%x)'s parent is not ancestor (%x)", i, hash[:4], uncle.ParentHash[0:4])
 		}
 
-		if err := ValidateHeader(v.config, v.Pow, uncle, ancestors[uncle.ParentHash].Header(), true, true); err != nil {
+		if err := ValidateHeader(v.config, v.Pow, uncle, ancestors[uncle.ParentHash].Header(), true, true, v.bc); err != nil {
 			return ValidationError(fmt.Sprintf("uncle[%d](%x) header invalid: %v", i, hash[:4], err))
 		}
 	}
@@ -194,17 +242,17 @@ func (v *BlockValidator) ValidateHeader(header, parent *types.Header, checkPow b
 	if parent == nil {
 		return ParentError(header.ParentHash)
 	}
-	// Short circuit if the header's already known or its parent missing
+	// Short circuit if the header's already known or its parent is missing
 	if v.bc.HasHeader(header.Hash()) {
 		return nil
 	}
-	return ValidateHeader(v.config, v.Pow, header, parent, checkPow, false)
+	return ValidateHeader(v.config, v.Pow, header, parent, checkPow, false, v.bc)
 }
 
 // Validates a header. Returns an error if the header is invalid.
 //
 // See YP section 4.3.4. "Block Header Validity"
-func ValidateHeader(config *ChainConfig, pow pow.PoW, header *types.Header, parent *types.Header, checkPow, uncle bool) error {
+func ValidateHeader(config *params.ChainConfig, pow pow.PoW, header *types.Header, parent *types.Header, checkPow, uncle bool, bc *BlockChain) error {
 	if big.NewInt(int64(len(header.Extra))).Cmp(params.MaximumExtraDataSize) == 1 {
 		return fmt.Errorf("Header extra data too long (%d)", len(header.Extra))
 	}
@@ -222,9 +270,9 @@ func ValidateHeader(config *ChainConfig, pow pow.PoW, header *types.Header, pare
 		return BlockEqualTSErr
 	}
 
-	expd := CalcDifficulty(config, header.Time.Uint64(), parent.Time.Uint64(), parent.Number, parent.Difficulty)
-	if expd.Cmp(header.Difficulty) > 1 {
-		return fmt.Errorf("Difficulty check failed for header %v, %v", header.Difficulty, expd)
+	expd := CalcDifficulty(config, header.Time.Uint64(), parent.Time.Uint64(), parent.Number, parent.Difficulty, bc)
+	if expd.Cmp(header.Difficulty) != 0 {
+		return fmt.Errorf("Difficulty check failed for header (remote: %v local: %v)", header.Difficulty, expd)
 	}
 
 	a := new(big.Int).Set(parent.GasLimit)
@@ -233,7 +281,7 @@ func ValidateHeader(config *ChainConfig, pow pow.PoW, header *types.Header, pare
 	b := new(big.Int).Set(parent.GasLimit)
 	b = b.Div(b, params.GasLimitBoundDivisor)
 	if !(a.Cmp(b) < 0) || (header.GasLimit.Cmp(params.MinGasLimit) == -1) {
-		return fmt.Errorf("GasLimit check failed for header %v (%v > %v)", header.GasLimit, a, b)
+		return fmt.Errorf("GasLimit check failed for header (remote: %v local_max: %v)", header.GasLimit, b)
 	}
 
 	num := new(big.Int).Set(parent.Number)
@@ -249,68 +297,78 @@ func ValidateHeader(config *ChainConfig, pow pow.PoW, header *types.Header, pare
 		}
 	}
 	// If all checks passed, validate the extra-data field for hard forks
-	return ValidateDAOHeaderExtraData(config, header)
+	if err := ValidateDAOHeaderExtraData(config, header); err != nil {
+		return err
+	}
+	if !uncle && config.EIP150Block != nil && config.EIP150Block.Cmp(header.Number) == 0 {
+		if config.EIP150Hash != (common.Hash{}) && config.EIP150Hash != header.Hash() {
+			return ValidationError("Homestead gas reprice fork hash mismatch: have 0x%x, want 0x%x", header.Hash(), config.EIP150Hash)
+		}
+	}
+	return nil
+}
+
+func ValidateHeaderHeaderChain(config *params.ChainConfig, pow pow.PoW, header *types.Header, parent *types.Header, checkPow, uncle bool, hc *HeaderChain) error {
+	if big.NewInt(int64(len(header.Extra))).Cmp(params.MaximumExtraDataSize) == 1 {
+		return fmt.Errorf("Header extra data too long (%d)", len(header.Extra))
+	}
+
+	if uncle {
+		if header.Time.Cmp(common.MaxBig) == 1 {
+			return BlockTSTooBigErr
+		}
+	} else {
+		if header.Time.Cmp(big.NewInt(time.Now().Unix())) == 1 {
+			return BlockFutureErr
+		}
+	}
+	if header.Time.Cmp(parent.Time) != 1 {
+		return BlockEqualTSErr
+	}
+
+	expd := CalcDifficultyHeaderChain(config, header.Time.Uint64(), parent.Time.Uint64(), parent.Number, parent.Difficulty, hc)
+	if expd.Cmp(header.Difficulty) != 0 {
+		return fmt.Errorf("Difficulty check failed for header (remote: %v local: %v)", header.Difficulty, expd)
+	}
+
+	a := new(big.Int).Set(parent.GasLimit)
+	a = a.Sub(a, header.GasLimit)
+	a.Abs(a)
+	b := new(big.Int).Set(parent.GasLimit)
+	b = b.Div(b, params.GasLimitBoundDivisor)
+	if !(a.Cmp(b) < 0) || (header.GasLimit.Cmp(params.MinGasLimit) == -1) {
+		return fmt.Errorf("GasLimit check failed for header (remote: %v local_max: %v)", header.GasLimit, b)
+	}
+
+	num := new(big.Int).Set(parent.Number)
+	num.Sub(header.Number, num)
+	if num.Cmp(big.NewInt(1)) != 0 {
+		return BlockNumberErr
+	}
+
+	if checkPow {
+		// Verify the nonce of the header. Return an error if it's not valid
+		if !pow.Verify(types.NewBlockWithHeader(header)) {
+			return &BlockNonceErr{header.Number, header.Hash(), header.Nonce.Uint64()}
+		}
+	}
+	if !uncle && config.EIP150Block != nil && config.EIP150Block.Cmp(header.Number) == 0 {
+		if config.EIP150Hash != (common.Hash{}) && config.EIP150Hash != header.Hash() {
+			return ValidationError("Homestead gas reprice fork hash mismatch: have 0x%x, want 0x%x", header.Hash(), config.EIP150Hash)
+		}
+	}
+	return nil
 }
 
 // CalcDifficulty is the difficulty adjustment algorithm. It returns
 // the difficulty that a new block should have when created at time
 // given the parent block's time and difficulty.
-func CalcDifficulty(config *ChainConfig, time, parentTime uint64, parentNumber, parentDiff *big.Int) *big.Int {
-	if config.IsHomestead(new(big.Int).Add(parentNumber, common.Big1)) {
-		return calcDifficultyHomestead(time, parentTime, parentNumber, parentDiff)
-	} else {
+func CalcDifficulty(config *params.ChainConfig, time, parentTime uint64, parentNumber, parentDiff *big.Int, bc *BlockChain) *big.Int {
+	if parentNumber.Cmp(FluxDbixDiffBlock) < 0 {
 		return calcDifficultyFrontier(time, parentTime, parentNumber, parentDiff)
+	} else {
+		return FluxDifficulty(time, parentTime, parentNumber, parentDiff, bc)
 	}
-}
-
-func calcDifficultyHomestead(time, parentTime uint64, parentNumber, parentDiff *big.Int) *big.Int {
-	// https://github.com/elementrem/EIPs/blob/master/EIPS/eip-2.mediawiki
-	// algorithm:
-	// diff = (parent_diff +
-	//         (parent_diff / 2048 * max(1 - (block_timestamp - parent_timestamp) // 10, -99))
-	//        ) + 2^(periodCount - 2)
-
-	bigTime := new(big.Int).SetUint64(time)
-	bigParentTime := new(big.Int).SetUint64(parentTime)
-
-	// holds intermediate values to make the algo easier to read & audit
-	x := new(big.Int)
-	y := new(big.Int)
-
-	// 1 - (block_timestamp -parent_timestamp) // 10
-	x.Sub(bigTime, bigParentTime)
-	x.Div(x, big90)
-	x.Sub(common.Big1, x)
-
-	// max(1 - (block_timestamp - parent_timestamp) // 10, -99)))
-	if x.Cmp(bigMinus99) < 0 {
-		x.Set(bigMinus99)
-	}
-
-	// (parent_diff + parent_diff // 768 * max(1 - (block_timestamp - parent_timestamp) // 10, -99))
-	//y.Div(parentDiff, params.DifficultyBoundDivisor)
-	y.Div(parentDiff, params.DifficultyBoundDivisorNew)
-	x.Mul(y, x)
-	x.Add(parentDiff, x)
-
-	// minimum difficulty can ever be (before exponential factor)
-	if x.Cmp(params.MinimumDifficulty) < 0 {
-		x.Set(params.MinimumDifficulty)
-	}
-
-	/*// for the exponential factor //rmv
-	periodCount := new(big.Int).Add(parentNumber, common.Big1)
-	periodCount.Div(periodCount, ExpDiffPeriod)
-
-	// the exponential factor, commonly referred to as "the bomb"
-	// diff = diff + 2^(periodCount - 2)
-	if periodCount.Cmp(common.Big1) > 0 {
-		y.Sub(periodCount, common.Big2)
-		y.Exp(common.Big2, y, nil)
-		x.Add(x, y)
-	}*/ //rmv
-
-	return x
 }
 
 func calcDifficultyFrontier(time, parentTime uint64, parentNumber, parentDiff *big.Int) *big.Int {
@@ -319,10 +377,11 @@ func calcDifficultyFrontier(time, parentTime uint64, parentNumber, parentDiff *b
 	
 	diff := new(big.Int)
 	adjust := new(big.Int)
-	if parentNumber.Cmp(params.DiffForkBlock) > 39000 {
-		adjust = new(big.Int).Div(parentDiff, params.DifficultyBoundDivisorNew)
-	} else {
+	if parentNumber.Cmp(params.DiffForkBlock) < 39000 {
 		adjust = new(big.Int).Div(parentDiff, params.DifficultyBoundDivisor)
+		
+	} else {
+		adjust = new(big.Int).Div(parentDiff, params.DifficultyBoundDivisorNew)
 	}
 	
 	bigTime := new(big.Int)
@@ -351,6 +410,132 @@ func calcDifficultyFrontier(time, parentTime uint64, parentNumber, parentDiff *b
 	}
 
 	return diff
+}
+
+func FluxDifficulty(time, parentTime uint64, parentNumber, parentDiff *big.Int, bc *BlockChain) *big.Int {
+	x := new(big.Int)
+	nFirstBlock := new(big.Int)
+	nFirstBlock.Sub(parentNumber, nPowAveragingWindow90)
+
+	diffTime := new(big.Int)
+	diffTime.Sub(big.NewInt(int64(time)), big.NewInt(int64(parentTime)))
+
+	nLastBlockTime := bc.CalcPastMedianTime(parentNumber.Uint64())
+	nFirstBlockTime := bc.CalcPastMedianTime(nFirstBlock.Uint64())
+	nActualTimespan := new(big.Int)
+	nActualTimespan.Sub(nLastBlockTime, nFirstBlockTime)
+
+	y := new(big.Int)
+	y.Sub(nActualTimespan, AveragingWindowTimespan90())
+	y.Div(y, big.NewInt(4))
+	nActualTimespan.Add(y, AveragingWindowTimespan90())
+
+	if nActualTimespan.Cmp(MinActualTimespanFlux(false)) < 0 {
+		doubleBig90 := new(big.Int)
+		doubleBig90.Mul(big90, big.NewInt(2))
+		if diffTime.Cmp(doubleBig90) > 0 {
+			nActualTimespan.Set(MinActualTimespanFlux(true))
+		} else {
+			nActualTimespan.Set(MinActualTimespanFlux(false))
+		}
+	} else if nActualTimespan.Cmp(MaxActualTimespanFlux(false)) > 0 {
+		halfBig90 := new(big.Int)
+		halfBig90.Div(big90, big.NewInt(2))
+		if diffTime.Cmp(halfBig90) < 0 {
+			nActualTimespan.Set(MaxActualTimespanFlux(true))
+		} else {
+			nActualTimespan.Set(MaxActualTimespanFlux(false))
+		}
+	}
+
+	x.Mul(parentDiff, AveragingWindowTimespan90())
+
+	x.Div(x, nActualTimespan)
+
+	if x.Cmp(params.MinimumDifficulty) < 0 {
+		x.Set(params.MinimumDifficulty)
+	}
+
+	return x
+}
+
+func CalcDifficultyHeaderChain(config *params.ChainConfig, time, parentTime uint64, parentNumber, parentDiff *big.Int, hc *HeaderChain) *big.Int {
+	if parentNumber.Cmp(FluxDbixDiffBlock) > 0 {
+		return FluxDifficultyHeaderChain(time, parentTime, parentNumber, parentDiff, hc)
+	}
+	return nil
+}
+
+func FluxDifficultyHeaderChain(time, parentTime uint64, parentNumber, parentDiff *big.Int, hc *HeaderChain) *big.Int {
+	x := new(big.Int)
+	nFirstBlock := new(big.Int)
+	nFirstBlock.Sub(parentNumber, nPowAveragingWindow90)
+
+	diffTime := new(big.Int)
+	diffTime.Sub(big.NewInt(int64(time)), big.NewInt(int64(parentTime)))
+
+	nLastBlockTime := hc.CalcPastMedianTime(parentNumber.Uint64())
+	nFirstBlockTime := hc.CalcPastMedianTime(nFirstBlock.Uint64())
+	nActualTimespan := new(big.Int)
+	nActualTimespan.Sub(nLastBlockTime, nFirstBlockTime)
+
+	y := new(big.Int)
+	y.Sub(nActualTimespan, AveragingWindowTimespan90())
+	y.Div(y, big.NewInt(4))
+	nActualTimespan.Add(y, AveragingWindowTimespan90())
+
+	if nActualTimespan.Cmp(MinActualTimespanFlux(false)) < 0 {
+		doubleBig90 := new(big.Int)
+		doubleBig90.Mul(big90, big.NewInt(2))
+		if diffTime.Cmp(doubleBig90) > 0 {
+			nActualTimespan.Set(MinActualTimespanFlux(true))
+		} else {
+			nActualTimespan.Set(MinActualTimespanFlux(false))
+		}
+	} else if nActualTimespan.Cmp(MaxActualTimespanFlux(false)) > 0 {
+		halfBig90 := new(big.Int)
+		halfBig90.Div(big90, big.NewInt(2))
+		if diffTime.Cmp(halfBig90) < 0 {
+			nActualTimespan.Set(MaxActualTimespanFlux(true))
+		} else {
+			nActualTimespan.Set(MaxActualTimespanFlux(false))
+		}
+	}
+
+	x.Mul(parentDiff, AveragingWindowTimespan90())
+	x.Div(x, nActualTimespan)
+
+	if x.Cmp(params.MinimumDifficulty) < 0 {
+		x.Set(params.MinimumDifficulty)
+	}
+
+	return x
+}
+
+func CalcDifficultyStandard(config *params.ChainConfig, time, parentTime uint64, parentNumber, parentDiff *big.Int) *big.Int {
+	bigTime := new(big.Int).SetUint64(time)
+	bigParentTime := new(big.Int).SetUint64(parentTime)
+
+	x := new(big.Int)
+	y := new(big.Int)
+
+	x.Sub(bigTime, bigParentTime)
+	x.Div(x, big90)
+	x.Sub(common.Big1, x)
+
+	if x.Cmp(bigMinus99) < 0 {
+		x.Set(bigMinus99)
+	}
+
+	y.Div(parentDiff, params.DifficultyBoundDivisor)
+	x.Mul(y, x)
+	x.Add(parentDiff, x)
+
+	if x.Cmp(params.MinimumDifficulty) < 0 {
+		x.Set(params.MinimumDifficulty)
+	}
+
+	return x
 }
 
 // CalcGasLimit computes the gas limit of the next block after parent.

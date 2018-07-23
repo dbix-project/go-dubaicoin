@@ -1,18 +1,18 @@
-// Copyright 2015 The go-dubaicoin Authors
-// This file is part of the go-dubaicoin library.
+// Copyright 2015 The go-ethereum Authors
+// This file is part of the go-ethereum library.
 //
-// The go-dubaicoin library is free software: you can redistribute it and/or modify
+// The go-ethereum library is free software: you can redistribute it and/or modify
 // it under the terms of the GNU Lesser General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
 //
-// The go-dubaicoin library is distributed in the hope that it will be useful,
+// The go-ethereum library is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
 // GNU Lesser General Public License for more details.
 //
 // You should have received a copy of the GNU Lesser General Public License
-// along with the go-dubaicoin library. If not, see <http://www.gnu.org/licenses/>.
+// along with the go-ethereum library. If not, see <http://www.gnu.org/licenses/>.
 
 package fetcher
 
@@ -24,13 +24,12 @@ import (
 	"testing"
 	"time"
 
-
-	"github.com/dbix-project/go-dubaicoin/common"
-	"github.com/dbix-project/go-dubaicoin/core"
-	"github.com/dbix-project/go-dubaicoin/core/types"
-	"github.com/dbix-project/go-dubaicoin/crypto"
-	"github.com/dbix-project/go-dubaicoin/ethdb"
-	"github.com/dbix-project/go-dubaicoin/params"
+	"github.com/dubaicoin-dbix/go-dubaicoin/common"
+	"github.com/dubaicoin-dbix/go-dubaicoin/core"
+	"github.com/dubaicoin-dbix/go-dubaicoin/core/types"
+	"github.com/dubaicoin-dbix/go-dubaicoin/crypto"
+	"github.com/dubaicoin-dbix/go-dubaicoin/dbixdb"
+	"github.com/dubaicoin-dbix/go-dubaicoin/params"
 )
 
 var (
@@ -46,12 +45,13 @@ var (
 // contains a transaction and every 5th an uncle to allow testing correct block
 // reassembly.
 func makeChain(n int, seed byte, parent *types.Block) ([]common.Hash, map[common.Hash]*types.Block) {
-	blocks, _ := core.GenerateChain(nil, parent, testdb, n, func(i int, block *core.BlockGen) {
+	blocks, _ := core.GenerateChain(params.TestChainConfig, parent, testdb, n, func(i int, block *core.BlockGen) {
 		block.SetCoinbase(common.Address{seed})
 
 		// If the block number is multiple of 3, send a bonus transaction to the miner
 		if parent == genesis && i%3 == 0 {
-			tx, err := types.NewTransaction(block.TxNonce(testAddress), common.Address{seed}, big.NewInt(1000), params.TxGas, nil, nil).SignECDSA(testKey)
+			signer := types.MakeSigner(params.TestChainConfig, block.Number())
+			tx, err := types.SignTx(types.NewTransaction(block.TxNonce(testAddress), common.Address{seed}, big.NewInt(1000), params.TxGas, nil, nil), signer, testKey)
 			if err != nil {
 				panic(err)
 			}

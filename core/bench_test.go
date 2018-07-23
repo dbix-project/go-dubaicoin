@@ -1,18 +1,18 @@
-// Copyright 2015 The go-dubaicoin Authors
-// This file is part of the go-dubaicoin library.
+// Copyright 2015 The go-ethereum Authors
+// This file is part of the go-ethereum library.
 //
-// The go-dubaicoin library is free software: you can redistribute it and/or modify
+// The go-ethereum library is free software: you can redistribute it and/or modify
 // it under the terms of the GNU Lesser General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
 //
-// The go-dubaicoin library is distributed in the hope that it will be useful,
+// The go-ethereum library is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
 // GNU Lesser General Public License for more details.
 //
 // You should have received a copy of the GNU Lesser General Public License
-// along with the go-dubaicoin library. If not, see <http://www.gnu.org/licenses/>.
+// along with the go-ethereum library. If not, see <http://www.gnu.org/licenses/>.
 
 package core
 
@@ -23,12 +23,13 @@ import (
 	"os"
 	"testing"
 
-	"github.com/dbix-project/go-dubaicoin/common"
-	"github.com/dbix-project/go-dubaicoin/core/types"
-	"github.com/dbix-project/go-dubaicoin/crypto"
-	"github.com/dbix-project/go-dubaicoin/ethdb"
-	"github.com/dbix-project/go-dubaicoin/event"
-	"github.com/dbix-project/go-dubaicoin/params"
+	"github.com/dubaicoin-dbix/go-dubaicoin/common"
+	"github.com/dubaicoin-dbix/go-dubaicoin/core/types"
+	"github.com/dubaicoin-dbix/go-dubaicoin/core/vm"
+	"github.com/dubaicoin-dbix/go-dubaicoin/crypto"
+	"github.com/dubaicoin-dbix/go-dubaicoin/dbixdb"
+	"github.com/dubaicoin-dbix/go-dubaicoin/event"
+	"github.com/dubaicoin-dbix/go-dubaicoin/params"
 )
 
 func BenchmarkInsertChain_empty_memdb(b *testing.B) {
@@ -83,7 +84,7 @@ func genValueTx(nbytes int) func(int, *BlockGen) {
 		toaddr := common.Address{}
 		data := make([]byte, nbytes)
 		gas := IntrinsicGas(data, false, false)
-		tx, _ := types.NewTransaction(gen.TxNonce(benchRootAddr), toaddr, big.NewInt(1), gas, nil, data).SignECDSA(benchRootKey)
+		tx, _ := types.SignTx(types.NewTransaction(gen.TxNonce(benchRootAddr), toaddr, big.NewInt(1), gas, nil, data), types.HomesteadSigner{}, benchRootKey)
 		gen.AddTx(tx)
 	}
 }
@@ -102,7 +103,7 @@ func init() {
 	}
 }
 
-// genTxRing returns a block generator that sends dubaicoin in a ring
+// genTxRing returns a block generator that sends ether in a ring
 // among n accounts. This is creates n entries in the state database
 // and fills the blocks with many small transactions.
 func genTxRing(naccounts int) func(int, *BlockGen) {
@@ -123,7 +124,7 @@ func genTxRing(naccounts int) func(int, *BlockGen) {
 				nil,
 				nil,
 			)
-			tx, _ = tx.SignECDSA(ringKeys[from])
+			tx, _ = types.SignTx(tx, types.HomesteadSigner{}, ringKeys[from])
 			gen.AddTx(tx)
 			from = to
 		}
@@ -148,7 +149,7 @@ func benchInsertChain(b *testing.B, disk bool, gen func(int, *BlockGen)) {
 	if !disk {
 		db, _ = ethdb.NewMemDatabase()
 	} else {
-		dir, err := ioutil.TempDir("", "dbix-core-bench")
+		dir, err := ioutil.TempDir("", "eth-core-bench")
 		if err != nil {
 			b.Fatalf("cannot create temporary directory: %v", err)
 		}
@@ -163,16 +164,135 @@ func benchInsertChain(b *testing.B, disk bool, gen func(int, *BlockGen)) {
 	// Generate a chain of b.N blocks using the supplied block
 	// generator function.
 	genesis := WriteGenesisBlockForTesting(db, GenesisAccount{benchRootAddr, benchRootFunds})
-	chain, _ := GenerateChain(nil, genesis, db, b.N, gen)
+	chain, _ := GenerateChain(params.TestChainConfig, genesis, db, b.N, gen)
 
 	// Time the insertion of the new chain.
 	// State and blocks are stored in the same DB.
 	evmux := new(event.TypeMux)
-	chainman, _ := NewBlockChain(db, &ChainConfig{HomesteadBlock: new(big.Int)}, FakePow{}, evmux)
+	chainman, _ := NewBlockChain(db, &params.ChainConfig{HomesteadBlock: new(big.Int)}, FakePow{}, evmux, vm.Config{})
 	defer chainman.Stop()
 	b.ReportAllocs()
 	b.ResetTimer()
 	if i, err := chainman.InsertChain(chain); err != nil {
 		b.Fatalf("insert error (block %d): %v\n", i, err)
+	}
+}
+
+func BenchmarkChainRead_header_10k(b *testing.B) {
+	benchReadChain(b, false, 10000)
+}
+func BenchmarkChainRead_full_10k(b *testing.B) {
+	benchReadChain(b, true, 10000)
+}
+func BenchmarkChainRead_header_100k(b *testing.B) {
+	benchReadChain(b, false, 100000)
+}
+func BenchmarkChainRead_full_100k(b *testing.B) {
+	benchReadChain(b, true, 100000)
+}
+func BenchmarkChainRead_header_500k(b *testing.B) {
+	benchReadChain(b, false, 500000)
+}
+func BenchmarkChainRead_full_500k(b *testing.B) {
+	benchReadChain(b, true, 500000)
+}
+func BenchmarkChainWrite_header_10k(b *testing.B) {
+	benchWriteChain(b, false, 10000)
+}
+func BenchmarkChainWrite_full_10k(b *testing.B) {
+	benchWriteChain(b, true, 10000)
+}
+func BenchmarkChainWrite_header_100k(b *testing.B) {
+	benchWriteChain(b, false, 100000)
+}
+func BenchmarkChainWrite_full_100k(b *testing.B) {
+	benchWriteChain(b, true, 100000)
+}
+func BenchmarkChainWrite_header_500k(b *testing.B) {
+	benchWriteChain(b, false, 500000)
+}
+func BenchmarkChainWrite_full_500k(b *testing.B) {
+	benchWriteChain(b, true, 500000)
+}
+
+// makeChainForBench writes a given number of headers or empty blocks/receipts
+// into a database.
+func makeChainForBench(db ethdb.Database, full bool, count uint64) {
+	var hash common.Hash
+	for n := uint64(0); n < count; n++ {
+		header := &types.Header{
+			Coinbase:    common.Address{},
+			Number:      big.NewInt(int64(n)),
+			ParentHash:  hash,
+			Difficulty:  big.NewInt(1),
+			UncleHash:   types.EmptyUncleHash,
+			TxHash:      types.EmptyRootHash,
+			ReceiptHash: types.EmptyRootHash,
+		}
+		hash = header.Hash()
+		WriteHeader(db, header)
+		WriteCanonicalHash(db, hash, n)
+		WriteTd(db, hash, n, big.NewInt(int64(n+1)))
+		if full || n == 0 {
+			block := types.NewBlockWithHeader(header)
+			WriteBody(db, hash, n, block.Body())
+			WriteBlockReceipts(db, hash, n, nil)
+		}
+	}
+}
+
+func benchWriteChain(b *testing.B, full bool, count uint64) {
+	for i := 0; i < b.N; i++ {
+		dir, err := ioutil.TempDir("", "eth-chain-bench")
+		if err != nil {
+			b.Fatalf("cannot create temporary directory: %v", err)
+		}
+		db, err := ethdb.NewLDBDatabase(dir, 128, 1024)
+		if err != nil {
+			b.Fatalf("error opening database at %v: %v", dir, err)
+		}
+		makeChainForBench(db, full, count)
+		db.Close()
+		os.RemoveAll(dir)
+	}
+}
+
+func benchReadChain(b *testing.B, full bool, count uint64) {
+	dir, err := ioutil.TempDir("", "eth-chain-bench")
+	if err != nil {
+		b.Fatalf("cannot create temporary directory: %v", err)
+	}
+	defer os.RemoveAll(dir)
+
+	db, err := ethdb.NewLDBDatabase(dir, 128, 1024)
+	if err != nil {
+		b.Fatalf("error opening database at %v: %v", dir, err)
+	}
+	makeChainForBench(db, full, count)
+	db.Close()
+
+	b.ReportAllocs()
+	b.ResetTimer()
+
+	for i := 0; i < b.N; i++ {
+		db, err := ethdb.NewLDBDatabase(dir, 128, 1024)
+		if err != nil {
+			b.Fatalf("error opening database at %v: %v", dir, err)
+		}
+		chain, err := NewBlockChain(db, testChainConfig(), FakePow{}, new(event.TypeMux), vm.Config{})
+		if err != nil {
+			b.Fatalf("error creating chain: %v", err)
+		}
+
+		for n := uint64(0); n < count; n++ {
+			header := chain.GetHeaderByNumber(n)
+			if full {
+				hash := header.Hash()
+				GetBody(db, hash, n)
+				GetBlockReceipts(db, hash, n)
+			}
+		}
+
+		db.Close()
 	}
 }

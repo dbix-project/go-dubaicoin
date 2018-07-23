@@ -14,11 +14,11 @@
 // You should have received a copy of the GNU Lesser General Public License
 // along with the go-ethereum library. If not, see <http://www.gnu.org/licenses/>.
 
-package dbix
+package eth
 
 import (
-	"github.com/dbix-project/go-dubaicoin/metrics"
-	"github.com/dbix-project/go-dubaicoin/p2p"
+	"github.com/dubaicoin-dbix/go-dubaicoin/metrics"
+	"github.com/dubaicoin-dbix/go-dubaicoin/p2p"
 )
 
 var (

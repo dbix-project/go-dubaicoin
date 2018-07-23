@@ -22,7 +22,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/dbix-project/go-dubaicoin/common"
+	"github.com/dubaicoin-dbix/go-dubaicoin/common"
 )
 
 type keyStorePlain struct {

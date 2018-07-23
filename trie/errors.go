@@ -19,7 +19,7 @@ package trie
 import (
 	"fmt"
 
-	"github.com/dbix-project/go-dubaicoin/common"
+	"github.com/dubaicoin-dbix/go-dubaicoin/common"
 )
 
 // MissingNodeError is returned by the trie functions (TryGet, TryUpdate, TryDelete)

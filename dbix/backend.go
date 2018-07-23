@@ -1,24 +1,23 @@
-// Copyright 2014 The go-ethereum Authors && Copyright 2015 go-dubaicoin Authors
-// This file is part of the go-dubaicoin library.
+// Copyright 2014 The go-ethereum Authors
+// This file is part of the go-ethereum library.
 //
-// The go-dubaicoin library is free software: you can redistribute it and/or modify
+// The go-ethereum library is free software: you can redistribute it and/or modify
 // it under the terms of the GNU Lesser General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
 //
-// The go-dubaicoin library is distributed in the hope that it will be useful,
+// The go-ethereum library is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
 // GNU Lesser General Public License for more details.
 //
 // You should have received a copy of the GNU Lesser General Public License
-// along with the go-dubaicoin library. If not, see <http://www.gnu.org/licenses/>.
+// along with the go-ethereum library. If not, see <http://www.gnu.org/licenses/>.
 
-// Package dbix implements the Dubaicoin protocol.
-package dbix
+// Package eth implements the Dubaicoin protocol.
+package eth
 
 import (
-	"bytes"
 	"errors"
 	"fmt"
 	"math/big"
@@ -29,26 +28,26 @@ import (
 	"sync"
 	"time"
 
-	"github.com/dbix-project/ethash"
-	"github.com/dbix-project/go-dubaicoin/accounts"
-	"github.com/dbix-project/go-dubaicoin/common"
-	"github.com/dbix-project/go-dubaicoin/common/compiler"
-	"github.com/dbix-project/go-dubaicoin/common/httpclient"
-	"github.com/dbix-project/go-dubaicoin/common/registrar/ethreg"
-	"github.com/dbix-project/go-dubaicoin/core"
-	"github.com/dbix-project/go-dubaicoin/core/types"
-	"github.com/dbix-project/go-dubaicoin/core/vm"
-	"github.com/dbix-project/go-dubaicoin/dbix/downloader"
-	"github.com/dbix-project/go-dubaicoin/dbix/filters"
-	"github.com/dbix-project/go-dubaicoin/ethdb"
-	"github.com/dbix-project/go-dubaicoin/event"
-	"github.com/dbix-project/go-dubaicoin/logger"
-	"github.com/dbix-project/go-dubaicoin/logger/glog"
-	"github.com/dbix-project/go-dubaicoin/miner"
-	"github.com/dbix-project/go-dubaicoin/node"
-	"github.com/dbix-project/go-dubaicoin/p2p"
-	"github.com/dbix-project/go-dubaicoin/rlp"
-	"github.com/dbix-project/go-dubaicoin/rpc"
+	"github.com/ethereum/ethash"
+	"github.com/dubaicoin-dbix/go-dubaicoin/accounts"
+	"github.com/dubaicoin-dbix/go-dubaicoin/common"
+	"github.com/dubaicoin-dbix/go-dubaicoin/core"
+	"github.com/dubaicoin-dbix/go-dubaicoin/core/types"
+	"github.com/dubaicoin-dbix/go-dubaicoin/core/vm"
+	"github.com/dubaicoin-dbix/go-dubaicoin/dbix/downloader"
+	"github.com/dubaicoin-dbix/go-dubaicoin/dbix/filters"
+	"github.com/dubaicoin-dbix/go-dubaicoin/dbix/gasprice"
+	"github.com/dubaicoin-dbix/go-dubaicoin/dbixdb"
+	"github.com/dubaicoin-dbix/go-dubaicoin/event"
+	"github.com/dubaicoin-dbix/go-dubaicoin/internal/ethapi"
+	"github.com/dubaicoin-dbix/go-dubaicoin/logger"
+	"github.com/dubaicoin-dbix/go-dubaicoin/logger/glog"
+	"github.com/dubaicoin-dbix/go-dubaicoin/miner"
+	"github.com/dubaicoin-dbix/go-dubaicoin/node"
+	"github.com/dubaicoin-dbix/go-dubaicoin/p2p"
+	"github.com/dubaicoin-dbix/go-dubaicoin/params"
+	"github.com/dubaicoin-dbix/go-dubaicoin/pow"
+	"github.com/dubaicoin-dbix/go-dubaicoin/rpc"
 )
 
 const (
@@ -65,29 +64,31 @@ var (
 )
 
 type Config struct {
-	ChainConfig *core.ChainConfig // chain configuration
+	ChainConfig *params.ChainConfig // chain configuration
 
-	NetworkId int    // Network ID to use for selecting peers to connect to
-	Genesis   string // Genesis JSON to seed the chain database with
-	FastSync  bool   // Enables the state download based fast synchronisation algorithm
+	NetworkId  int    // Network ID to use for selecting peers to connect to
+	Genesis    string // Genesis JSON to seed the chain database with
+	FastSync   bool   // Enables the state download based fast synchronisation algorithm
+	LightMode  bool   // Running in light client mode
+	LightServ  int    // Maximum percentage of time allowed for serving LES requests
+	LightPeers int    // Maximum number of LES client peers
+	MaxPeers   int    // Maximum number of global peers
 
-	BlockChainVersion  int
 	SkipBcVersionCheck bool // e.g. blockchain export
 	DatabaseCache      int
 	DatabaseHandles    int
 
-	NatSpec   bool
 	DocRoot   string
 	AutoDAG   bool
+	PowFake   bool
 	PowTest   bool
 	PowShared bool
 	ExtraData []byte
 
-	AccountManager *accounts.Manager
-	Etherbase      common.Address
-	GasPrice       *big.Int
-	MinerThreads   int
-	SolcPath       string
+	Etherbase    common.Address
+	GasPrice     *big.Int
+	MinerThreads int
+	SolcPath     string
 
 	GpoMinGasPrice          *big.Int
 	GpoMaxGasPrice          *big.Int
@@ -96,65 +97,86 @@ type Config struct {
 	GpobaseStepUp           int
 	GpobaseCorrectionFactor int
 
-	EnableJit bool
-	ForceJit  bool
+	EnablePreimageRecording bool
 
 	TestGenesisBlock *types.Block   // Genesis block to seed the chain database with (testing only!)
 	TestGenesisState ethdb.Database // Genesis state to seed the database with (testing only!)
 }
 
-type Dubaicoin struct {
-	chainConfig *core.ChainConfig
-	// Channel for shutting down the dubaicoin
-	shutdownChan chan bool
+type LesServer interface {
+	Start(srvr *p2p.Server)
+	Stop()
+	Protocols() []p2p.Protocol
+}
 
-	// DB interfaces
-	chainDb ethdb.Database // Block chain database
-	dappDb  ethdb.Database // Dapp database
-
+// Ethereum implements the Dubaicoin full node service.
+type Ethereum struct {
+	chainConfig *params.ChainConfig
+	// Channel for shutting down the service
+	shutdownChan  chan bool // Channel for shutting down the dubaicoin
+	stopDbUpgrade func()    // stop chain db sequential key upgrade
 	// Handlers
 	txPool          *core.TxPool
 	txMu            sync.Mutex
 	blockchain      *core.BlockChain
-	accountManager  *accounts.Manager
-	pow             *ethash.Ethash
 	protocolManager *ProtocolManager
-	SolcPath        string
-	solc            *compiler.Solidity
-	gpo             *GasPriceOracle
+	lesServer       LesServer
+	// DB interfaces
+	chainDb ethdb.Database // Block chain database
 
-	GpoMinGasPrice          *big.Int
-	GpoMaxGasPrice          *big.Int
-	GpoFullBlockRatio       int
-	GpobaseStepDown         int
-	GpobaseStepUp           int
-	GpobaseCorrectionFactor int
+	eventMux       *event.TypeMux
+	pow            pow.PoW
+	accountManager *accounts.Manager
 
-	httpclient *httpclient.HTTPClient
+	ApiBackend *EthApiBackend
 
-	eventMux *event.TypeMux
-	miner    *miner.Miner
+	miner        *miner.Miner
+	Mining       bool
+	MinerThreads int
+	AutoDAG      bool
+	autodagquit  chan bool
+	etherbase    common.Address
+	solcPath     string
 
-	Mining        bool
-	MinerThreads  int
-	NatSpec       bool
-	AutoDAG       bool
-	PowTest       bool
-	autodagquit   chan bool
-	etherbase     common.Address
 	netVersionId  int
-	netRPCService *PublicNetAPI
+	netRPCService *ethapi.PublicNetAPI
 }
 
-func New(ctx *node.ServiceContext, config *Config) (*Dubaicoin, error) {
-	// Open the chain database and perform any upgrades needed
-	chainDb, err := ctx.OpenDatabase("chaindata", config.DatabaseCache, config.DatabaseHandles)
+func (s *Ethereum) AddLesServer(ls LesServer) {
+	s.lesServer = ls
+	s.protocolManager.lesServer = ls
+}
+
+// New creates a new Ethereum object (including the
+// initialisation of the common Ethereum object)
+func New(ctx *node.ServiceContext, config *Config) (*Ethereum, error) {
+	chainDb, err := CreateDB(ctx, config, "chaindata")
 	if err != nil {
 		return nil, err
 	}
-	if db, ok := chainDb.(*ethdb.LDBDatabase); ok {
-		db.Meter("dbix/db/chaindata/")
+	stopDbUpgrade := upgradeSequentialKeys(chainDb)
+	if err := SetupGenesisBlock(&chainDb, config); err != nil {
+		return nil, err
 	}
+	pow, err := CreatePoW(config)
+	if err != nil {
+		return nil, err
+	}
+
+	eth := &Ethereum{
+		chainDb:        chainDb,
+		eventMux:       ctx.EventMux,
+		accountManager: ctx.AccountManager,
+		pow:            pow,
+		shutdownChan:   make(chan bool),
+		stopDbUpgrade:  stopDbUpgrade,
+		netVersionId:   config.NetworkId,
+		etherbase:      config.Etherbase,
+		MinerThreads:   config.MinerThreads,
+		AutoDAG:        config.AutoDAG,
+		solcPath:       config.SolcPath,
+	}
+
 	if err := upgradeChainDatabase(chainDb); err != nil {
 		return nil, err
 	}
@@ -162,83 +184,19 @@ func New(ctx *node.ServiceContext, config *Config) (*Dubaicoin, error) {
 		return nil, err
 	}
 
-	dappDb, err := ctx.OpenDatabase("dapp", config.DatabaseCache, config.DatabaseHandles)
-	if err != nil {
-		return nil, err
-	}
-	if db, ok := dappDb.(*ethdb.LDBDatabase); ok {
-		db.Meter("dbix/db/dapp/")
-	}
 	glog.V(logger.Info).Infof("Protocol Versions: %v, Network Id: %v", ProtocolVersions, config.NetworkId)
-
-	// Load up any custom genesis block if requested
-	if len(config.Genesis) > 0 {
-		block, err := core.WriteGenesisBlock(chainDb, strings.NewReader(config.Genesis))
-		if err != nil {
-			return nil, err
-		}
-		glog.V(logger.Info).Infof("Successfully wrote custom genesis block: %x", block.Hash())
-	}
-
-	// Load up a test setup if directly injected
-	if config.TestGenesisState != nil {
-		chainDb = config.TestGenesisState
-	}
-	if config.TestGenesisBlock != nil {
-		core.WriteTd(chainDb, config.TestGenesisBlock.Hash(), config.TestGenesisBlock.Difficulty())
-		core.WriteBlock(chainDb, config.TestGenesisBlock)
-		core.WriteCanonicalHash(chainDb, config.TestGenesisBlock.Hash(), config.TestGenesisBlock.NumberU64())
-		core.WriteHeadBlockHash(chainDb, config.TestGenesisBlock.Hash())
-	}
 
 	if !config.SkipBcVersionCheck {
 		bcVersion := core.GetBlockChainVersion(chainDb)
-		if bcVersion != config.BlockChainVersion && bcVersion != 0 {
-			return nil, fmt.Errorf("Blockchain DB version mismatch (%d / %d). Run gdbix upgradedb.\n", bcVersion, config.BlockChainVersion)
+		if bcVersion != core.BlockChainVersion && bcVersion != 0 {
+			return nil, fmt.Errorf("Blockchain DB version mismatch (%d / %d). Run gdbix upgradedb.\n", bcVersion, core.BlockChainVersion)
 		}
-		core.WriteBlockChainVersion(chainDb, config.BlockChainVersion)
-	}
-	glog.V(logger.Info).Infof("Blockchain DB Version: %d", config.BlockChainVersion)
-
-	dbix := &Dubaicoin{
-		shutdownChan:            make(chan bool),
-		chainDb:                 chainDb,
-		dappDb:                  dappDb,
-		eventMux:                ctx.EventMux,
-		accountManager:          config.AccountManager,
-		etherbase:               config.Etherbase,
-		netVersionId:            config.NetworkId,
-		NatSpec:                 config.NatSpec,
-		MinerThreads:            config.MinerThreads,
-		SolcPath:                config.SolcPath,
-		AutoDAG:                 config.AutoDAG,
-		PowTest:                 config.PowTest,
-		GpoMinGasPrice:          config.GpoMinGasPrice,
-		GpoMaxGasPrice:          config.GpoMaxGasPrice,
-		GpoFullBlockRatio:       config.GpoFullBlockRatio,
-		GpobaseStepDown:         config.GpobaseStepDown,
-		GpobaseStepUp:           config.GpobaseStepUp,
-		GpobaseCorrectionFactor: config.GpobaseCorrectionFactor,
-		httpclient:              httpclient.New(config.DocRoot),
-	}
-	switch {
-	case config.PowTest:
-		glog.V(logger.Info).Infof("ethash used in test mode")
-		dbix.pow, err = ethash.NewForTesting()
-		if err != nil {
-			return nil, err
-		}
-	case config.PowShared:
-		glog.V(logger.Info).Infof("ethash used in shared mode")
-		dbix.pow = ethash.NewShared()
-
-	default:
-		dbix.pow = ethash.New()
+		core.WriteBlockChainVersion(chainDb, core.BlockChainVersion)
 	}
 
 	// load the genesis block or write a new one if no genesis
 	// block is prenent in the database.
-	genesis := core.GetBlock(chainDb, core.GetCanonicalHash(chainDb, 0))
+	genesis := core.GetBlock(chainDb, core.GetCanonicalHash(chainDb, 0), 0)
 	if genesis == nil {
 		genesis, err = core.WriteDefaultGenesisBlock(chainDb)
 		if err != nil {
@@ -252,62 +210,134 @@ func New(ctx *node.ServiceContext, config *Config) (*Dubaicoin, error) {
 	}
 	core.WriteChainConfig(chainDb, genesis.Hash(), config.ChainConfig)
 
-	dbix.chainConfig = config.ChainConfig
-	dbix.chainConfig.VmConfig = vm.Config{
-		EnableJit: config.EnableJit,
-		ForceJit:  config.ForceJit,
-	}
+	eth.chainConfig = config.ChainConfig
 
-	dbix.blockchain, err = core.NewBlockChain(chainDb, dbix.chainConfig, dbix.pow, dbix.EventMux())
+	glog.V(logger.Info).Infoln("Chain config:", eth.chainConfig)
+
+	eth.blockchain, err = core.NewBlockChain(chainDb, eth.chainConfig, eth.pow, eth.EventMux(), vm.Config{EnablePreimageRecording: config.EnablePreimageRecording})
 	if err != nil {
 		if err == core.ErrNoGenesis {
 			return nil, fmt.Errorf(`No chain found. Please initialise a new chain using the "init" subcommand.`)
 		}
 		return nil, err
 	}
-	dbix.gpo = NewGasPriceOracle(dbix)
+	newPool := core.NewTxPool(eth.chainConfig, eth.EventMux(), eth.blockchain.State, eth.blockchain.GasLimit)
+	eth.txPool = newPool
 
-	newPool := core.NewTxPool(dbix.chainConfig, dbix.EventMux(), dbix.blockchain.State, dbix.blockchain.GasLimit)
-	dbix.txPool = newPool
+	maxPeers := config.MaxPeers
+	if config.LightServ > 0 {
+		// if we are running a light server, limit the number of ETH peers so that we reserve some space for incoming LES connections
+		// temporary solution until the new peer connectivity API is finished
+		halfPeers := maxPeers / 2
+		maxPeers -= config.LightPeers
+		if maxPeers < halfPeers {
+			maxPeers = halfPeers
+		}
+	}
 
-	if dbix.protocolManager, err = NewProtocolManager(dbix.chainConfig, config.FastSync, config.NetworkId, dbix.eventMux, dbix.txPool, dbix.pow, dbix.blockchain, chainDb); err != nil {
+	if eth.protocolManager, err = NewProtocolManager(eth.chainConfig, config.FastSync, config.NetworkId, maxPeers, eth.eventMux, eth.txPool, eth.pow, eth.blockchain, chainDb); err != nil {
 		return nil, err
 	}
-	dbix.miner = miner.New(dbix, dbix.chainConfig, dbix.EventMux(), dbix.pow)
-	dbix.miner.SetGasPrice(config.GasPrice)
-	dbix.miner.SetExtra(config.ExtraData)
+	eth.miner = miner.New(eth, eth.chainConfig, eth.EventMux(), eth.pow)
+	eth.miner.SetGasPrice(config.GasPrice)
+	eth.miner.SetExtra(config.ExtraData)
 
-	return dbix, nil
+	gpoParams := &gasprice.GpoParams{
+		GpoMinGasPrice:          config.GpoMinGasPrice,
+		GpoMaxGasPrice:          config.GpoMaxGasPrice,
+		GpoFullBlockRatio:       config.GpoFullBlockRatio,
+		GpobaseStepDown:         config.GpobaseStepDown,
+		GpobaseStepUp:           config.GpobaseStepUp,
+		GpobaseCorrectionFactor: config.GpobaseCorrectionFactor,
+	}
+	gpo := gasprice.NewGasPriceOracle(eth.blockchain, chainDb, eth.eventMux, gpoParams)
+	eth.ApiBackend = &EthApiBackend{eth, gpo}
+
+	return eth, nil
+}
+
+// CreateDB creates the chain database.
+func CreateDB(ctx *node.ServiceContext, config *Config, name string) (ethdb.Database, error) {
+	db, err := ctx.OpenDatabase(name, config.DatabaseCache, config.DatabaseHandles)
+	if db, ok := db.(*ethdb.LDBDatabase); ok {
+		db.Meter("eth/db/chaindata/")
+	}
+	return db, err
+}
+
+// SetupGenesisBlock initializes the genesis block for a Dubaicoin service
+func SetupGenesisBlock(chainDb *ethdb.Database, config *Config) error {
+	// Load up any custom genesis block if requested
+	if len(config.Genesis) > 0 {
+		block, err := core.WriteGenesisBlock(*chainDb, strings.NewReader(config.Genesis))
+		if err != nil {
+			return err
+		}
+		glog.V(logger.Info).Infof("Successfully wrote custom genesis block: %x", block.Hash())
+	}
+	// Load up a test setup if directly injected
+	if config.TestGenesisState != nil {
+		*chainDb = config.TestGenesisState
+	}
+	if config.TestGenesisBlock != nil {
+		core.WriteTd(*chainDb, config.TestGenesisBlock.Hash(), config.TestGenesisBlock.NumberU64(), config.TestGenesisBlock.Difficulty())
+		core.WriteBlock(*chainDb, config.TestGenesisBlock)
+		core.WriteCanonicalHash(*chainDb, config.TestGenesisBlock.Hash(), config.TestGenesisBlock.NumberU64())
+		core.WriteHeadBlockHash(*chainDb, config.TestGenesisBlock.Hash())
+	}
+	return nil
+}
+
+// CreatePoW creates the required type of PoW instance for a Dubaicoin service
+func CreatePoW(config *Config) (pow.PoW, error) {
+	switch {
+	case config.PowFake:
+		glog.V(logger.Info).Infof("ethash used in fake mode")
+		return pow.PoW(core.FakePow{}), nil
+	case config.PowTest:
+		glog.V(logger.Info).Infof("ethash used in test mode")
+		return ethash.NewForTesting()
+	case config.PowShared:
+		glog.V(logger.Info).Infof("ethash used in shared mode")
+		return ethash.NewShared(), nil
+	default:
+		return ethash.New(), nil
+	}
 }
 
 // APIs returns the collection of RPC services the dubaicoin package offers.
 // NOTE, some of these services probably need to be moved to somewhere else.
-func (s *Dubaicoin) APIs() []rpc.API {
-	return []rpc.API{
+func (s *Ethereum) APIs() []rpc.API {
+	return append(ethapi.GetAPIs(s.ApiBackend, s.solcPath), []rpc.API{
 		{
-			Namespace: "dbix",
+			Namespace: "eth",
 			Version:   "1.0",
 			Service:   NewPublicEthereumAPI(s),
 			Public:    true,
 		}, {
-			Namespace: "dbix",
+			Namespace: "eth",
 			Version:   "1.0",
-			Service:   NewPublicAccountAPI(s.accountManager),
+			Service:   NewPublicMinerAPI(s),
 			Public:    true,
 		}, {
-			Namespace: "personal",
+			Namespace: "eth",
 			Version:   "1.0",
-			Service:   NewPrivateAccountAPI(s),
+			Service:   downloader.NewPublicDownloaderAPI(s.protocolManager.downloader, s.eventMux),
+			Public:    true,
+		}, {
+			Namespace: "miner",
+			Version:   "1.0",
+			Service:   NewPrivateMinerAPI(s),
 			Public:    false,
 		}, {
-			Namespace: "dbix",
+			Namespace: "eth",
 			Version:   "1.0",
-			Service:   NewPublicBlockChainAPI(s.chainConfig, s.blockchain, s.miner, s.chainDb, s.gpo, s.eventMux, s.accountManager),
+			Service:   filters.NewPublicFilterAPI(s.ApiBackend, false),
 			Public:    true,
 		}, {
 			Namespace: "dbix",
 			Version:   "1.0",
-			Service:   NewPublicTransactionPoolAPI(s),
+			Service:   NewPublicEthereumAPI(s),
 			Public:    true,
 		}, {
 			Namespace: "dbix",
@@ -320,19 +350,9 @@ func (s *Dubaicoin) APIs() []rpc.API {
 			Service:   downloader.NewPublicDownloaderAPI(s.protocolManager.downloader, s.eventMux),
 			Public:    true,
 		}, {
-			Namespace: "miner",
-			Version:   "1.0",
-			Service:   NewPrivateMinerAPI(s),
-			Public:    false,
-		}, {
-			Namespace: "txpool",
-			Version:   "1.0",
-			Service:   NewPublicTxPoolAPI(s),
-			Public:    true,
-		}, {
 			Namespace: "dbix",
 			Version:   "1.0",
-			Service:   filters.NewPublicFilterAPI(s.chainDb, s.eventMux),
+			Service:   filters.NewPublicFilterAPI(s.ApiBackend, false),
 			Public:    true,
 		}, {
 			Namespace: "admin",
@@ -352,54 +372,15 @@ func (s *Dubaicoin) APIs() []rpc.API {
 			Version:   "1.0",
 			Service:   s.netRPCService,
 			Public:    true,
-		}, {
-			Namespace: "admin",
-			Version:   "1.0",
-			Service:   ethreg.NewPrivateRegistarAPI(s.chainConfig, s.blockchain, s.chainDb, s.txPool, s.accountManager),
-		}, {
-			Namespace: "eth",
-			Version:   "1.0",
-			Service:   NewPublicEthereumAPI(s),
-			Public:    true,
-		}, {
-			Namespace: "eth",
-			Version:   "1.0",
-			Service:   NewPublicAccountAPI(s.accountManager),
-			Public:    true,
-		}, {
-			Namespace: "eth",
-			Version:   "1.0",
-			Service:   NewPublicBlockChainAPI(s.chainConfig, s.blockchain, s.miner, s.chainDb, s.gpo, s.eventMux, s.accountManager),
-			Public:    true,
-		}, {
-			Namespace: "eth",
-			Version:   "1.0",
-			Service:   NewPublicTransactionPoolAPI(s),
-			Public:    true,
-		}, {
-			Namespace: "eth",
-			Version:   "1.0",
-			Service:   NewPublicMinerAPI(s),
-			Public:    true,
-		}, {
-			Namespace: "eth",
-			Version:   "1.0",
-			Service:   downloader.NewPublicDownloaderAPI(s.protocolManager.downloader, s.eventMux),
-			Public:    true,
-		}, {
-			Namespace: "eth",
-			Version:   "1.0",
-			Service:   filters.NewPublicFilterAPI(s.chainDb, s.eventMux),
-			Public:    true,
 		},
-	}
+	}...)
 }
 
-func (s *Dubaicoin) ResetWithGenesisBlock(gb *types.Block) {
+func (s *Ethereum) ResetWithGenesisBlock(gb *types.Block) {
 	s.blockchain.ResetWithGenesisBlock(gb)
 }
 
-func (s *Dubaicoin) Etherbase() (eb common.Address, err error) {
+func (s *Ethereum) Etherbase() (eb common.Address, err error) {
 	eb = s.etherbase
 	if (eb == common.Address{}) {
 		firstAccount, err := s.AccountManager().AccountByIndex(0)
@@ -412,48 +393,72 @@ func (s *Dubaicoin) Etherbase() (eb common.Address, err error) {
 }
 
 // set in js console via admin interface or wrapper from cli flags
-func (self *Dubaicoin) SetEtherbase(etherbase common.Address) {
+func (self *Ethereum) SetEtherbase(etherbase common.Address) {
 	self.etherbase = etherbase
 	self.miner.SetEtherbase(etherbase)
 }
 
-func (s *Dubaicoin) StopMining()         { s.miner.Stop() }
-func (s *Dubaicoin) IsMining() bool      { return s.miner.Mining() }
-func (s *Dubaicoin) Miner() *miner.Miner { return s.miner }
+func (s *Ethereum) StartMining(threads int) error {
+	eb, err := s.Etherbase()
+	if err != nil {
+		err = fmt.Errorf("Cannot start mining without etherbase address: %v", err)
+		glog.V(logger.Error).Infoln(err)
+		return err
+	}
+	go s.miner.Start(eb, threads)
+	return nil
+}
 
-func (s *Dubaicoin) AccountManager() *accounts.Manager  { return s.accountManager }
-func (s *Dubaicoin) BlockChain() *core.BlockChain       { return s.blockchain }
-func (s *Dubaicoin) TxPool() *core.TxPool               { return s.txPool }
-func (s *Dubaicoin) EventMux() *event.TypeMux           { return s.eventMux }
-func (s *Dubaicoin) ChainDb() ethdb.Database            { return s.chainDb }
-func (s *Dubaicoin) DappDb() ethdb.Database             { return s.dappDb }
-func (s *Dubaicoin) IsListening() bool                  { return true } // Always listening
-func (s *Dubaicoin) EthVersion() int                    { return int(s.protocolManager.SubProtocols[0].Version) }
-func (s *Dubaicoin) NetVersion() int                    { return s.netVersionId }
-func (s *Dubaicoin) Downloader() *downloader.Downloader { return s.protocolManager.downloader }
+func (s *Ethereum) StopMining()         { s.miner.Stop() }
+func (s *Ethereum) IsMining() bool      { return s.miner.Mining() }
+func (s *Ethereum) Miner() *miner.Miner { return s.miner }
+
+func (s *Ethereum) AccountManager() *accounts.Manager  { return s.accountManager }
+func (s *Ethereum) BlockChain() *core.BlockChain       { return s.blockchain }
+func (s *Ethereum) TxPool() *core.TxPool               { return s.txPool }
+func (s *Ethereum) EventMux() *event.TypeMux           { return s.eventMux }
+func (s *Ethereum) Pow() pow.PoW                       { return s.pow }
+func (s *Ethereum) ChainDb() ethdb.Database            { return s.chainDb }
+func (s *Ethereum) IsListening() bool                  { return true } // Always listening
+func (s *Ethereum) EthVersion() int                    { return int(s.protocolManager.SubProtocols[0].Version) }
+func (s *Ethereum) NetVersion() int                    { return s.netVersionId }
+func (s *Ethereum) Downloader() *downloader.Downloader { return s.protocolManager.downloader }
 
 // Protocols implements node.Service, returning all the currently configured
 // network protocols to start.
-func (s *Dubaicoin) Protocols() []p2p.Protocol {
-	return s.protocolManager.SubProtocols
+func (s *Ethereum) Protocols() []p2p.Protocol {
+	if s.lesServer == nil {
+		return s.protocolManager.SubProtocols
+	} else {
+		return append(s.protocolManager.SubProtocols, s.lesServer.Protocols()...)
+	}
 }
 
 // Start implements node.Service, starting all internal goroutines needed by the
 // Dubaicoin protocol implementation.
-func (s *Dubaicoin) Start(srvr *p2p.Server) error {
+func (s *Ethereum) Start(srvr *p2p.Server) error {
+	s.netRPCService = ethapi.NewPublicNetAPI(srvr, s.NetVersion())
 	if s.AutoDAG {
 		s.StartAutoDAG()
 	}
 	s.protocolManager.Start()
-	s.netRPCService = NewPublicNetAPI(srvr, s.NetVersion())
+	if s.lesServer != nil {
+		s.lesServer.Start(srvr)
+	}
 	return nil
 }
 
 // Stop implements node.Service, terminating all internal goroutines used by the
 // Dubaicoin protocol.
-func (s *Dubaicoin) Stop() error {
+func (s *Ethereum) Stop() error {
+	if s.stopDbUpgrade != nil {
+		s.stopDbUpgrade()
+	}
 	s.blockchain.Stop()
 	s.protocolManager.Stop()
+	if s.lesServer != nil {
+		s.lesServer.Stop()
+	}
 	s.txPool.Stop()
 	s.miner.Stop()
 	s.eventMux.Stop()
@@ -461,14 +466,13 @@ func (s *Dubaicoin) Stop() error {
 	s.StopAutoDAG()
 
 	s.chainDb.Close()
-	s.dappDb.Close()
 	close(s.shutdownChan)
 
 	return nil
 }
 
 // This function will wait for a shutdown and resumes main thread execution
-func (s *Dubaicoin) WaitForShutdown() {
+func (s *Ethereum) WaitForShutdown() {
 	<-s.shutdownChan
 }
 
@@ -481,7 +485,7 @@ func (s *Dubaicoin) WaitForShutdown() {
 // stop any number of times.
 // For any more sophisticated pattern of DAG generation, use CLI subcommand
 // makedag
-func (self *Dubaicoin) StartAutoDAG() {
+func (self *Ethereum) StartAutoDAG() {
 	if self.autodagquit != nil {
 		return // already started
 	}
@@ -527,34 +531,12 @@ func (self *Dubaicoin) StartAutoDAG() {
 }
 
 // stopAutoDAG stops automatic DAG pregeneration by quitting the loop
-func (self *Dubaicoin) StopAutoDAG() {
+func (self *Ethereum) StopAutoDAG() {
 	if self.autodagquit != nil {
 		close(self.autodagquit)
 		self.autodagquit = nil
 	}
 	glog.V(logger.Info).Infof("Automatic pregeneration of ethash DAG OFF (ethash dir: %s)", ethash.DefaultDir)
-}
-
-
-// HTTPClient returns the light http client used for fetching offchain docs
-// (natspec, source for verification)
-func (self *Dubaicoin) HTTPClient() *httpclient.HTTPClient {
-	return self.httpclient
-}
-
-func (self *Dubaicoin) Solc() (*compiler.Solidity, error) {
-	var err error
-	if self.solc == nil {
-		self.solc, err = compiler.New(self.SolcPath)
-	}
-	return self.solc, err
-}
-
-// set in js console via admin interface or wrapper from cli flags
-func (self *Dubaicoin) SetSolc(solcPath string) (*compiler.Solidity, error) {
-	self.SolcPath = solcPath
-	self.solc = nil
-	return self.Solc()
 }
 
 // dagFiles(epoch) returns the two alternative DAG filenames (not a path)
@@ -563,105 +545,4 @@ func dagFiles(epoch uint64) (string, string) {
 	seedHash, _ := ethash.GetSeedHash(epoch * epochLength)
 	dag := fmt.Sprintf("full-R%d-%x", ethashRevision, seedHash[:8])
 	return dag, "full-R" + dag
-}
-
-// upgradeChainDatabase ensures that the chain database stores block split into
-// separate header and body entries.
-func upgradeChainDatabase(db ethdb.Database) error {
-	// Short circuit if the head block is stored already as separate header and body
-	data, err := db.Get([]byte("LastBlock"))
-	if err != nil {
-		return nil
-	}
-	head := common.BytesToHash(data)
-
-	if block := core.GetBlockByHashOld(db, head); block == nil {
-		return nil
-	}
-	// At least some of the database is still the old format, upgrade (skip the head block!)
-	glog.V(logger.Info).Info("Old database detected, upgrading...")
-
-	if db, ok := db.(*ethdb.LDBDatabase); ok {
-		blockPrefix := []byte("block-hash-")
-		for it := db.NewIterator(); it.Next(); {
-			// Skip anything other than a combined block
-			if !bytes.HasPrefix(it.Key(), blockPrefix) {
-				continue
-			}
-			// Skip the head block (merge last to signal upgrade completion)
-			if bytes.HasSuffix(it.Key(), head.Bytes()) {
-				continue
-			}
-			// Load the block, split and serialize (order!)
-			block := core.GetBlockByHashOld(db, common.BytesToHash(bytes.TrimPrefix(it.Key(), blockPrefix)))
-
-			if err := core.WriteTd(db, block.Hash(), block.DeprecatedTd()); err != nil {
-				return err
-			}
-			if err := core.WriteBody(db, block.Hash(), block.Body()); err != nil {
-				return err
-			}
-			if err := core.WriteHeader(db, block.Header()); err != nil {
-				return err
-			}
-			if err := db.Delete(it.Key()); err != nil {
-				return err
-			}
-		}
-		// Lastly, upgrade the head block, disabling the upgrade mechanism
-		current := core.GetBlockByHashOld(db, head)
-
-		if err := core.WriteTd(db, current.Hash(), current.DeprecatedTd()); err != nil {
-			return err
-		}
-		if err := core.WriteBody(db, current.Hash(), current.Body()); err != nil {
-			return err
-		}
-		if err := core.WriteHeader(db, current.Header()); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func addMipmapBloomBins(db ethdb.Database) (err error) {
-	const mipmapVersion uint = 2
-
-	// check if the version is set. We ignore data for now since there's
-	// only one version so we can easily ignore it for now
-	var data []byte
-	data, _ = db.Get([]byte("setting-mipmap-version"))
-	if len(data) > 0 {
-		var version uint
-		if err := rlp.DecodeBytes(data, &version); err == nil && version == mipmapVersion {
-			return nil
-		}
-	}
-
-	defer func() {
-		if err == nil {
-			var val []byte
-			val, err = rlp.EncodeToBytes(mipmapVersion)
-			if err == nil {
-				err = db.Put([]byte("setting-mipmap-version"), val)
-			}
-			return
-		}
-	}()
-	latestBlock := core.GetBlock(db, core.GetHeadBlockHash(db))
-	if latestBlock == nil { // clean database
-		return
-	}
-
-	tstart := time.Now()
-	glog.V(logger.Info).Infoln("upgrading db log bloom bins")
-	for i := uint64(0); i <= latestBlock.NumberU64(); i++ {
-		hash := core.GetCanonicalHash(db, i)
-		if (hash == common.Hash{}) {
-			return fmt.Errorf("chain db corrupted. Could not find block %d.", i)
-		}
-		core.WriteMipmapBloom(db, i, core.GetBlockReceipts(db, hash))
-	}
-	glog.V(logger.Info).Infoln("upgrade completed in", time.Since(tstart))
-	return nil
 }

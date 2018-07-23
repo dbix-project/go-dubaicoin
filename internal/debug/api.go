@@ -33,8 +33,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/dbix-project/go-dubaicoin/logger"
-	"github.com/dbix-project/go-dubaicoin/logger/glog"
+	"github.com/dubaicoin-dbix/go-dubaicoin/logger"
+	"github.com/dubaicoin-dbix/go-dubaicoin/logger/glog"
 )
 
 // Handler is the global debugging handler.

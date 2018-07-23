@@ -1,22 +1,22 @@
-// Copyright 2016 The go-dubaicoin Authors
-// This file is part of the go-dubaicoin library.
+// Copyright 2016 The go-ethereum Authors
+// This file is part of the go-ethereum library.
 //
-// The go-dubaicoin library is free software: you can redistribute it and/or modify
+// The go-ethereum library is free software: you can redistribute it and/or modify
 // it under the terms of the GNU Lesser General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
 //
-// The go-dubaicoin library is distributed in the hope that it will be useful,
+// The go-ethereum library is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
 // GNU Lesser General Public License for more details.
 //
 // You should have received a copy of the GNU Lesser General Public License
-// along with the go-dubaicoin library. If not, see <http://www.gnu.org/licenses/>.
+// along with the go-ethereum library. If not, see <http://www.gnu.org/licenses/>.
 
 /*
 Package hexutil implements hex encoding with 0x prefix.
-This encoding is used by the Ethereum RPC API to transport binary data in JSON payloads.
+This encoding is used by the Dubaicoin RPC API to transport binary data in JSON payloads.
 
 Encoding Rules
 
@@ -49,7 +49,6 @@ var (
 	ErrOddLength     = errors.New("hex string has odd length")
 	ErrUint64Range   = errors.New("hex number does not fit into 64 bits")
 	ErrUintRange     = fmt.Errorf("hex number does not fit into %d bits", uintBits)
-	ErrBig256Range   = errors.New("hex number does not fit into 256 bits")
 )
 
 // Decode decodes a hex string with 0x prefix.
@@ -60,11 +59,7 @@ func Decode(input string) ([]byte, error) {
 	if !has0xPrefix(input) {
 		return nil, ErrMissingPrefix
 	}
-	b, err := hex.DecodeString(input[2:])
-	if err != nil {
-		err = mapError(err)
-	}
-	return b, err
+	return hex.DecodeString(input[2:])
 }
 
 // MustDecode decodes a hex string with 0x prefix. It panics for invalid input.
@@ -131,14 +126,10 @@ func init() {
 }
 
 // DecodeBig decodes a hex string with 0x prefix as a quantity.
-// Numbers larger than 256 bits are not accepted.
 func DecodeBig(input string) (*big.Int, error) {
 	raw, err := checkNumber(input)
 	if err != nil {
 		return nil, err
-	}
-	if len(raw) > 64 {
-		return nil, ErrBig256Range
 	}
 	words := make([]big.Word, len(raw)/bigWordNibbles+1)
 	end := len(raw)
@@ -178,7 +169,7 @@ func EncodeBig(bigint *big.Int) string {
 	if nbits == 0 {
 		return "0x0"
 	}
-	return fmt.Sprintf("%#x", bigint)
+	return fmt.Sprintf("0x%x", bigint)
 }
 
 func has0xPrefix(input string) bool {
